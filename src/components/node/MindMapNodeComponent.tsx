@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Plus, Trash2, Edit3 } from 'lucide-react';
 import { marked } from 'marked';
-import { MindMapNode, NodeColor, NodeDirection } from '../../types/mindmap';
+import { MindMapNode, NodeColor, NodeTextColor, NodeDirection } from '../../types/mindmap';
 import { cn } from '../../lib/utils';
 
 interface MindMapNodeComponentProps {
@@ -15,7 +15,20 @@ interface MindMapNodeComponentProps {
   onDelete: (id: string) => void;
   onOpenContextMenu: (id: string, x: number, y: number) => void;
   onDimensionsChange?: (id: string, width: number, height: number) => void;
+  onStartConnect?: (sourceNodeId: string, dir: NodeDirection, clientX: number, clientY: number) => void;
+  isConnectTarget?: boolean;
+  isConnectInvalid?: boolean;
 }
+
+const TEXT_COLOR_STYLE_MAP: Record<NodeTextColor, string> = {
+  default: '#f1f5f9',
+  red: '#fb7185',
+  cyan: '#22d3ee',
+  amber: '#fbbf24',
+  emerald: '#34d399',
+  purple: '#c084fc',
+  slate: '#94a3b8',
+};
 
 const COLOR_CONFIG: Record<
   NodeColor,
@@ -82,6 +95,9 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
   onDelete,
   onOpenContextMenu,
   onDimensionsChange,
+  onStartConnect,
+  isConnectTarget,
+  isConnectInvalid,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -102,6 +118,7 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
   const theme = COLOR_CONFIG[node.color] || COLOR_CONFIG.red;
   const textAlign = node.textAlign || (shape === 'circle' ? 'center' : 'left');
   const alignClass = textAlign === 'center' ? 'text-center' : textAlign === 'right' ? 'text-right' : 'text-left';
+  const textColorHex = TEXT_COLOR_STYLE_MAP[node.textColor || 'default'] || '#f1f5f9';
 
   // Markdown rendering
   const renderedMarkdown = useMemo(() => {
@@ -332,7 +349,7 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
     }
   };
 
-  // Directional button builder helper
+  // Directional button builder helper (supports Click to Add Child, Drag to Attach)
   const renderDirectionButton = (
     dir: NodeDirection,
     positionClass: string,
@@ -340,11 +357,15 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
   ) => (
     <button
       type="button"
-      title={`Add thought ${label}`}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
+      title={`Add thought ${label} (Click) • Attach to node (Drag)`}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
         e.stopPropagation();
-        onAddChild(node.id, dir);
+        if (onStartConnect) {
+          onStartConnect(node.id, dir, e.clientX, e.clientY);
+        } else {
+          onAddChild(node.id, dir);
+        }
       }}
       className={cn(
         'absolute z-30 cursor-pointer pointer-events-auto',
@@ -376,6 +397,8 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
         'bg-[#0f1118]/95 backdrop-blur-md border',
         theme.border,
         isSelected && [theme.glow, 'ring-1 ring-white/40'],
+        isConnectTarget && 'ring-2 ring-cyan-400 border-cyan-400 shadow-[0_0_25px_rgba(6,182,212,0.6)] z-40',
+        isConnectInvalid && 'ring-2 ring-rose-500/70 border-rose-500/70 opacity-60',
         shape === 'circle' && 'rounded-full aspect-square flex items-center justify-center',
         shape === 'square' && 'rounded-sm',
         'cursor-grab active:cursor-grabbing z-10'
@@ -397,6 +420,17 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
         }
       }}
     >
+      {/* Target Attachment HUD Indicator */}
+      {isConnectTarget && (
+        <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded bg-cyan-500 text-black font-mono text-[9px] font-bold tracking-wider uppercase shadow-[0_0_12px_rgba(6,182,212,0.8)] pointer-events-none animate-pulse whitespace-nowrap z-50">
+          ATTACH TO NODE
+        </div>
+      )}
+      {isConnectInvalid && (
+        <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded bg-rose-500 text-white font-mono text-[9px] font-bold tracking-wider uppercase shadow-[0_0_12px_rgba(244,63,94,0.8)] pointer-events-none whitespace-nowrap z-50">
+          INVALID TARGET (LOOP)
+        </div>
+      )}
       {/* Tactical Corner Brackets (for square shape) */}
       {shape !== 'circle' && (
         <>
@@ -449,8 +483,17 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
 
       {/* Node Body Content */}
       <div
+        style={
+          {
+            color: textColorHex,
+            ['--tw-prose-body' as string]: textColorHex,
+            ['--tw-prose-headings' as string]: textColorHex,
+            ['--tw-prose-bold' as string]: textColorHex,
+            ['--tw-prose-links' as string]: textColorHex,
+          } as React.CSSProperties
+        }
         className={cn(
-          'w-full h-full font-mono text-xs leading-relaxed text-slate-100 flex flex-col',
+          'w-full h-full font-mono text-xs leading-relaxed flex flex-col',
           shape === 'circle' ? 'p-4' : 'p-3',
           shape === 'circle' && textAlign === 'center'
             ? 'items-center justify-center text-center'
@@ -488,13 +531,14 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
             }}
             className={cn(
               'w-full bg-transparent resize-none border-none outline-none',
-              'font-mono text-xs leading-relaxed text-slate-100 placeholder:text-slate-600',
+              'font-mono text-xs leading-relaxed placeholder:text-slate-600',
               'cursor-text focus:ring-0 p-0 block',
               shape === 'circle' && textAlign === 'center'
                 ? 'h-auto text-center'
                 : cn('h-full', alignClass)
             )}
             style={{
+              color: textColorHex,
               ...(shape === 'circle' && textAlign === 'center'
                 ? {
                     maxHeight: `${Math.max((node.height || 140) - 32, 20)}px`,
@@ -514,6 +558,7 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
             }}
             className={cn(
               'w-full cursor-text overflow-hidden prose-invert prose-xs break-words',
+              '[&_p]:text-inherit [&_h1]:text-inherit [&_h2]:text-inherit [&_li]:text-inherit [&_strong]:text-inherit [&_em]:text-inherit',
               shape === 'square' && 'h-full',
               '[&_p]:m-0 [&_ul]:pl-3.5 [&_ul]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h1]:font-bold [&_h1]:my-1 [&_h2]:text-xs [&_h2]:font-bold [&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded',
               shape === 'circle' && textAlign === 'center' ? 'text-center' : alignClass

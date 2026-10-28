@@ -1,6 +1,20 @@
 import React, { useEffect, useRef } from 'react';
-import { Plus, Trash2, Copy, ChevronRight, Shapes, Square, Circle, Palette, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
-import { MindMapNode, NodeColor, NodeShape, TextAlign } from '../../types/mindmap';
+import {
+  Plus,
+  Trash2,
+  Copy,
+  ChevronRight,
+  Shapes,
+  Square,
+  Circle,
+  Palette,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Unlink,
+  Type,
+} from 'lucide-react';
+import { MindMapNode, NodeColor, NodeTextColor, NodeShape, TextAlign } from '../../types/mindmap';
 import { cn } from '../../lib/utils';
 
 interface TacticalContextMenuProps {
@@ -16,9 +30,21 @@ interface TacticalContextMenuProps {
   onColorChange: (id: string, color: NodeColor) => void;
   onShapeChange: (id: string, shape: NodeShape) => void;
   onTextAlignChange: (id: string, align: TextAlign) => void;
+  onTextColorChange: (id: string, textColor: NodeTextColor) => void;
+  onDetachNode?: (id: string) => void;
 }
 
 const COLOR_DOTS: Record<NodeColor, string> = {
+  red: 'bg-rose-500',
+  cyan: 'bg-cyan-500',
+  amber: 'bg-amber-500',
+  emerald: 'bg-emerald-500',
+  purple: 'bg-purple-500',
+  slate: 'bg-slate-400',
+};
+
+const TEXT_COLOR_DOTS: Record<NodeTextColor, string> = {
+  default: 'bg-slate-100',
   red: 'bg-rose-500',
   cyan: 'bg-cyan-500',
   amber: 'bg-amber-500',
@@ -40,6 +66,8 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
   onColorChange,
   onShapeChange,
   onTextAlignChange,
+  onTextColorChange,
+  onDetachNode,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -72,7 +100,7 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
 
   // Clamp menu position to stay completely inside viewport bounds
   const menuWidth = 205;
-  const menuHeight = 340;
+  const menuHeight = node.parentId ? 420 : 385;
   const safeX = Math.min(Math.max(x, 10), window.innerWidth - menuWidth - 10);
   const safeY = Math.min(Math.max(y, 10), window.innerHeight - menuHeight - 10);
 
@@ -138,6 +166,22 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
         <Copy className="w-3.5 h-3.5 text-slate-400" />
         <span>Duplicate Node</span>
       </button>
+
+      {/* Detach Path (Float) - visible if node has a parent */}
+      {node.parentId && onDetachNode && (
+        <button
+          type="button"
+          onClick={() => {
+            onDetachNode(node.id);
+            onClose();
+          }}
+          className="w-full flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer outline-none hover:bg-amber-500/20 hover:text-amber-300 text-amber-400 transition-colors text-left"
+          title="Disconnect from parent node (leaves this node floating)"
+        >
+          <Unlink className="w-3.5 h-3.5" />
+          <span>Detach Path (Float)</span>
+        </button>
+      )}
 
       {/* Direct Shape Selector */}
       <div className="px-2 py-1.5 border-t border-white/[0.06] my-1">
@@ -229,11 +273,14 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
         </div>
       </div>
 
-      {/* Direct Color Palette */}
+      {/* Direct Border Color Palette */}
       <div className="px-2 py-1.5 border-t border-white/[0.06] my-1">
-        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5 font-semibold flex items-center gap-1.5">
-          <Palette className="w-3 h-3 text-cyan-400" />
-          <span>Color Accent</span>
+        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5 font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Palette className="w-3 h-3 text-cyan-400" />
+            <span>Border Color</span>
+          </div>
+          <span className="text-[8px] text-slate-500 uppercase">{node.color}</span>
         </div>
         <div className="flex items-center justify-between gap-1 px-0.5">
           {(['red', 'cyan', 'amber', 'emerald', 'purple', 'slate'] as NodeColor[]).map((c) => {
@@ -242,7 +289,7 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
               <button
                 key={c}
                 type="button"
-                title={c}
+                title={`Border Color: ${c}`}
                 onClick={() => {
                   onColorChange(node.id, c);
                 }}
@@ -255,6 +302,42 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* Direct Text Color Palette (Top-Level) */}
+      <div className="px-2 py-1.5 border-t border-white/[0.06] my-1">
+        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5 font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Type className="w-3 h-3 text-rose-400" />
+            <span>Text Color</span>
+          </div>
+          <span className="text-[8px] text-slate-500 uppercase">{node.textColor || 'default'}</span>
+        </div>
+        <div className="flex items-center justify-between gap-1 px-0.5">
+          {(['default', 'red', 'cyan', 'amber', 'emerald', 'purple', 'slate'] as NodeTextColor[]).map(
+            (c) => {
+              const isCurrent = (node.textColor || 'default') === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  title={`Text Color: ${c}`}
+                  onClick={() => {
+                    onTextColorChange(node.id, c);
+                  }}
+                  className={cn(
+                    'w-5 h-5 rounded-full flex items-center justify-center cursor-pointer transition-transform hover:scale-125',
+                    isCurrent ? 'ring-2 ring-white scale-110 shadow-lg' : 'opacity-70 hover:opacity-100'
+                  )}
+                >
+                  <span
+                    className={cn('w-3.5 h-3.5 rounded-full shadow-inner', TEXT_COLOR_DOTS[c])}
+                  />
+                </button>
+              );
+            }
+          )}
         </div>
       </div>
 

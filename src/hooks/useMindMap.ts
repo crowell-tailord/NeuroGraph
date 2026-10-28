@@ -3,6 +3,7 @@ import {
   MindMapDocument,
   MindMapNode,
   NodeColor,
+  NodeTextColor,
   NodeShape,
   NodeDirection,
   TextAlign,
@@ -389,6 +390,99 @@ export function useMindMap() {
     }));
   }, []);
 
+  // Update node text color
+  const updateNodeTextColor = useCallback((id: string, textColor: NodeTextColor) => {
+    setHasUnsavedChanges(true);
+    setDoc((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      nodes: prev.nodes.map((n) => (n.id === id ? { ...n, textColor } : n)),
+    }));
+  }, []);
+
+  // Detach a node from its parent (leaves the node floating)
+  const detachNode = useCallback((id: string) => {
+    setHasUnsavedChanges(true);
+    setDoc((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      nodes: prev.nodes.map((n) => (n.id === id ? { ...n, parentId: null } : n)),
+    }));
+  }, []);
+
+  // Check if possibleDescendant is downstream of ancestor
+  const isDescendantNode = (nodes: MindMapNode[], possibleDescendantId: string, ancestorId: string): boolean => {
+    let curr = nodes.find((n) => n.id === possibleDescendantId);
+    const visited = new Set<string>();
+    while (curr && curr.parentId) {
+      if (curr.parentId === ancestorId) return true;
+      if (visited.has(curr.parentId)) break;
+      visited.add(curr.parentId);
+      curr = nodes.find((n) => n.id === curr!.parentId);
+    }
+    return false;
+  };
+
+  // Drag and attach node connection
+  const attachNodes = useCallback((sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+
+    setHasUnsavedChanges(true);
+    setDoc((prev) => {
+      const sourceNode = prev.nodes.find((n) => n.id === sourceId);
+      const targetNode = prev.nodes.find((n) => n.id === targetId);
+      if (!sourceNode || !targetNode) return prev;
+
+      let childId: string;
+      let parentId: string;
+
+      if (sourceNode.parentId === null && targetNode.parentId !== null) {
+        // Source is floating -> source attaches to target
+        childId = sourceId;
+        parentId = targetId;
+      } else if (sourceNode.parentId !== null && targetNode.parentId === null) {
+        // Target is floating -> target attaches to source
+        childId = targetId;
+        parentId = sourceId;
+      } else if (sourceNode.parentId === null && targetNode.parentId === null) {
+        // Both floating: attach to the one that already has children, or source to target
+        const sourceHasChildren = prev.nodes.some((n) => n.parentId === sourceId);
+        const targetHasChildren = prev.nodes.some((n) => n.parentId === targetId);
+        if (!sourceHasChildren && targetHasChildren) {
+          childId = sourceId;
+          parentId = targetId;
+        } else if (sourceHasChildren && !targetHasChildren) {
+          childId = targetId;
+          parentId = sourceId;
+        } else {
+          childId = sourceId;
+          parentId = targetId;
+        }
+      } else {
+        // Both are attached: re-parent source to target unless it would cause cycle
+        if (!isDescendantNode(prev.nodes, targetId, sourceId)) {
+          childId = sourceId;
+          parentId = targetId;
+        } else if (!isDescendantNode(prev.nodes, sourceId, targetId)) {
+          childId = targetId;
+          parentId = sourceId;
+        } else {
+          return prev;
+        }
+      }
+
+      if (isDescendantNode(prev.nodes, parentId, childId)) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        updatedAt: Date.now(),
+        nodes: prev.nodes.map((n) => (n.id === childId ? { ...n, parentId } : n)),
+      };
+    });
+  }, []);
+
   // Duplicate node
   const duplicateNode = useCallback((id: string) => {
     setHasUnsavedChanges(true);
@@ -564,6 +658,9 @@ export function useMindMap() {
     updateNodeColor,
     updateNodeShape,
     updateNodeTextAlign,
+    updateNodeTextColor,
+    detachNode,
+    attachNodes,
     duplicateNode,
     deleteNode,
     createNewMap,

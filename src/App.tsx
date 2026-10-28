@@ -23,6 +23,9 @@ export function App() {
     updateNodeColor,
     updateNodeShape,
     updateNodeTextAlign,
+    updateNodeTextColor,
+    detachNode,
+    attachNodes,
     duplicateNode,
     deleteNode,
     createNewMap,
@@ -216,6 +219,9 @@ export function App() {
         onColorChange={updateNodeColor}
         onShapeChange={updateNodeShape}
         onTextAlignChange={updateNodeTextAlign}
+        onTextColorChange={updateNodeTextColor}
+        onDetachNode={detachNode}
+        onAttachNodes={attachNodes}
         onDimensionsChange={updateNodeDimensions}
         onAddRoot={handleAddRoot}
         onWheel={handleWheel}

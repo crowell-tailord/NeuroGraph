@@ -1,4 +1,5 @@
 export type NodeColor = 'red' | 'amber' | 'cyan' | 'emerald' | 'purple' | 'slate';
+export type NodeTextColor = 'default' | 'red' | 'amber' | 'cyan' | 'emerald' | 'purple' | 'slate';
 export type NodeShape = 'square' | 'circle';
 export type NodeDirection = 'top' | 'bottom' | 'left' | 'right';
 export type TextAlign = 'left' | 'center' | 'right';
@@ -12,6 +13,7 @@ export interface MindMapNode {
   width?: number;
   height?: number;
   color: NodeColor;
+  textColor?: NodeTextColor;
   tag?: string;
   shape?: NodeShape;
   textAlign?: TextAlign;

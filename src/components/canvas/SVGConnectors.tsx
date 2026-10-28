@@ -1,9 +1,21 @@
 import React from 'react';
 import { MindMapNode, NodeColor } from '../../types/mindmap';
 
+export interface DragConnectionData {
+  path: string;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  isTargetActive: boolean;
+  isTargetInvalid: boolean;
+}
+
 interface SVGConnectorsProps {
   nodes: MindMapNode[];
   selectedNodeId: string | null;
+  onDetachNode?: (nodeId: string) => void;
+  dragConnection?: DragConnectionData | null;
 }
 
 const COLOR_MAP: Record<NodeColor, { stroke: string; glow: string; dot: string }> = {
@@ -15,7 +27,12 @@ const COLOR_MAP: Record<NodeColor, { stroke: string; glow: string; dot: string }
   slate: { stroke: '#64748b', glow: 'rgba(100, 116, 139, 0.35)', dot: '#94a3b8' },
 };
 
-export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNodeId }) => {
+export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
+  nodes,
+  selectedNodeId,
+  onDetachNode,
+  dragConnection,
+}) => {
   const nodeMap = React.useMemo(() => {
     const map = new Map<string, MindMapNode>();
     nodes.forEach((n) => map.set(n.id, n));
@@ -26,6 +43,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNod
   const connections = React.useMemo(() => {
     const items: Array<{
       id: string;
+      childId: string;
       path: string;
       color: NodeColor;
       isSelected: boolean;
@@ -33,6 +51,8 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNod
       startY: number;
       endX: number;
       endY: number;
+      midX: number;
+      midY: number;
     }> = [];
 
     nodes.forEach((child) => {
@@ -104,6 +124,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNod
 
       items.push({
         id: `${parent.id}->${child.id}`,
+        childId: child.id,
         path,
         color: child.color || parent.color || 'red',
         isSelected,
@@ -111,6 +132,8 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNod
         startY,
         endX,
         endY,
+        midX: Math.round((startX + endX) / 2),
+        midY: Math.round((startY + endY) / 2),
       });
     });
 
@@ -133,7 +156,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNod
         const theme = COLOR_MAP[c.color] || COLOR_MAP.red;
 
         return (
-          <g key={c.id}>
+          <g key={c.id} className="group/connector">
             {/* Background halo glow line */}
             <path
               d={c.path}
@@ -141,7 +164,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNod
               stroke={theme.glow}
               strokeWidth={c.isSelected ? 4 : 2}
               strokeLinecap="round"
-              className="transition-all duration-75"
+              className="transition-[stroke,stroke-width] duration-75"
             />
 
             {/* Main tactical sharp vector line */}
@@ -153,7 +176,16 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNod
               strokeOpacity={c.isSelected ? 1 : 0.8}
               strokeDasharray={c.isSelected ? '4 2' : undefined}
               strokeLinecap="round"
-              className="transition-all duration-75"
+              className="transition-[stroke,stroke-width,stroke-opacity] duration-75 group-hover/connector:stroke-amber-400 group-hover/connector:stroke-width-2"
+            />
+
+            {/* Wide transparent hover target line */}
+            <path
+              d={c.path}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={20}
+              className="pointer-events-stroke cursor-pointer"
             />
 
             {/* Parent origin terminal dot */}
@@ -175,9 +207,123 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({ nodes, selectedNod
               stroke={theme.dot}
               strokeWidth={1.5}
             />
+
+            {/* Interactive Detach / Sever button at curve midpoint on hover */}
+            {onDetachNode && (
+              <g
+                className="opacity-0 group-hover/connector:opacity-100 transition-opacity duration-150 cursor-pointer pointer-events-auto"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDetachNode(c.childId);
+                }}
+              >
+                <circle
+                  cx={c.midX}
+                  cy={c.midY}
+                  r={10}
+                  fill="#0e111a"
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  className="transition-transform hover:scale-125"
+                />
+                <line
+                  x1={c.midX - 3.5}
+                  y1={c.midY - 3.5}
+                  x2={c.midX + 3.5}
+                  y2={c.midY + 3.5}
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                />
+                <line
+                  x1={c.midX + 3.5}
+                  y1={c.midY - 3.5}
+                  x2={c.midX - 3.5}
+                  y2={c.midY + 3.5}
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                />
+                <title>Sever connection (leaves node floating)</title>
+              </g>
+            )}
           </g>
         );
       })}
+
+      {/* Live Active Dragging Connection */}
+      {dragConnection && (
+        <g className="pointer-events-none">
+          {/* Outer glow */}
+          <path
+            d={dragConnection.path}
+            fill="none"
+            stroke={
+              dragConnection.isTargetInvalid
+                ? 'rgba(244, 63, 94, 0.5)'
+                : dragConnection.isTargetActive
+                ? 'rgba(6, 182, 212, 0.55)'
+                : 'rgba(56, 189, 248, 0.4)'
+            }
+            strokeWidth={5}
+            strokeLinecap="round"
+          />
+
+          {/* Animated tactical dash line */}
+          <path
+            d={dragConnection.path}
+            fill="none"
+            stroke={
+              dragConnection.isTargetInvalid
+                ? '#f43f5e'
+                : dragConnection.isTargetActive
+                ? '#06b6d4'
+                : '#38bdf8'
+            }
+            strokeWidth={2.5}
+            strokeDasharray="6 4"
+            strokeLinecap="round"
+          />
+
+          {/* Source node terminal dot */}
+          <circle
+            cx={dragConnection.startX}
+            cy={dragConnection.startY}
+            r={3.5}
+            fill={dragConnection.isTargetInvalid ? '#f43f5e' : '#06b6d4'}
+            stroke="#08090c"
+            strokeWidth={1.5}
+          />
+
+          {/* End cursor/target reticle */}
+          <circle
+            cx={dragConnection.endX}
+            cy={dragConnection.endY}
+            r={dragConnection.isTargetActive ? 8 : 5}
+            fill="none"
+            stroke={
+              dragConnection.isTargetInvalid
+                ? '#f43f5e'
+                : dragConnection.isTargetActive
+                ? '#06b6d4'
+                : '#38bdf8'
+            }
+            strokeWidth={2}
+          />
+          <circle
+            cx={dragConnection.endX}
+            cy={dragConnection.endY}
+            r={2}
+            fill={
+              dragConnection.isTargetInvalid
+                ? '#f43f5e'
+                : dragConnection.isTargetActive
+                ? '#06b6d4'
+                : '#38bdf8'
+            }
+          />
+        </g>
+      )}
     </svg>
   );
 };
