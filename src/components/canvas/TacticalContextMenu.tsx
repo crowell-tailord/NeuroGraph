@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import {
   Plus,
   Trash2,
@@ -14,7 +14,7 @@ import {
   Unlink,
   Type,
 } from 'lucide-react';
-import { MindMapNode, NodeColor, NodeTextColor, NodeShape, TextAlign } from '../../types/mindmap';
+import { MindMapNode, NodeColor, NodeTextColor, NodeShape, TextAlign, getNodeTotalConnections } from '../../types/mindmap';
 import { cn } from '../../lib/utils';
 
 interface TacticalContextMenuProps {
@@ -22,6 +22,7 @@ interface TacticalContextMenuProps {
   x: number;
   y: number;
   node: MindMapNode | null;
+  nodes?: MindMapNode[];
   onClose: () => void;
   onAddChild: (id: string, direction?: 'bottom') => void;
   onAddSibling: (id: string) => void;
@@ -58,6 +59,7 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
   x,
   y,
   node,
+  nodes,
   onClose,
   onAddChild,
   onAddSibling,
@@ -70,6 +72,11 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
   onDetachNode,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const totalConnections = useMemo(() => {
+    if (!node) return 0;
+    return getNodeTotalConnections(node, nodes || [node]);
+  }, [node, nodes]);
 
   // Close on outside click or Escape key
   useEffect(() => {
@@ -100,7 +107,7 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
 
   // Clamp menu position to stay completely inside viewport bounds
   const menuWidth = 205;
-  const menuHeight = node.parentId ? 420 : 385;
+  const menuHeight = totalConnections > 0 ? 420 : 385;
   const safeX = Math.min(Math.max(x, 10), window.innerWidth - menuWidth - 10);
   const safeY = Math.min(Math.max(y, 10), window.innerHeight - menuHeight - 10);
 
@@ -167,8 +174,8 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
         <span>Duplicate Node</span>
       </button>
 
-      {/* Detach Path (Float) - visible if node has a parent */}
-      {node.parentId && onDetachNode && (
+      {/* Detach Connections (Float) - visible if node has any connections */}
+      {totalConnections > 0 && onDetachNode && (
         <button
           type="button"
           onClick={() => {
@@ -176,10 +183,10 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
             onClose();
           }}
           className="w-full flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer outline-none hover:bg-amber-500/20 hover:text-amber-300 text-amber-400 transition-colors text-left"
-          title="Disconnect from parent node (leaves this node floating)"
+          title={`Disconnect all ${totalConnections} connection(s) (leaves this node floating)`}
         >
           <Unlink className="w-3.5 h-3.5" />
-          <span>Detach Path (Float)</span>
+          <span>Detach Connections ({totalConnections})</span>
         </button>
       )}
 

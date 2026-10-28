@@ -97,6 +97,38 @@ body {
   animation: pulseGlow 2.5s ease-in-out infinite;
 }
 
+/* Tactical connector marching ants animation for hover / sever */
+@keyframes connectorMarchingAnts {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -18;
+  }
+}
+
+.group\/connector:hover .connector-tactical-line {
+  stroke: #f43f5e !important;
+  stroke-width: 2px !important;
+  stroke-opacity: 1 !important;
+  stroke-dasharray: 5 4 !important;
+  animation: connectorMarchingAnts 0.5s linear infinite !important;
+}
+
+.group\/connector:hover .connector-glow-line {
+  stroke: rgba(244, 63, 94, 0.45) !important;
+  stroke-width: 4px !important;
+}
+
+.group\/connector:hover .connector-terminal-dot {
+  fill: #f43f5e !important;
+  stroke: #08090c !important;
+}
+
+.group\/connector:hover .connector-terminal-reticle {
+  stroke: #f43f5e !important;
+}
+
 /* Glassmorphism panel */
 .tactical-glass {
   background: rgba(14, 17, 24, 0.82);

@@ -166,7 +166,11 @@ export function useViewport(options: UseViewportOptions = {}) {
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       // Do not initiate panning if clicking on a button, input, textarea or interactive element
-      if ((e.target as HTMLElement).closest('button, input, textarea, a, [role="button"], [role="menuitem"]')) {
+      if (
+        (e.target as HTMLElement).closest(
+          'button, input, textarea, a, [role="button"], [role="menuitem"], [data-interactive="true"]'
+        )
+      ) {
         return;
       }
 

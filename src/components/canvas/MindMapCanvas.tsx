@@ -8,6 +8,9 @@ import {
   NodeDirection,
   TextAlign,
   ViewportState,
+  getNodeTotalConnections,
+  areNodesConnected,
+  MAX_CONNECTIONS_PER_NODE,
 } from '../../types/mindmap';
 import { GridBackground } from './GridBackground';
 import { SVGConnectors } from './SVGConnectors';
@@ -30,6 +33,7 @@ interface MindMapCanvasProps {
   onTextAlignChange: (id: string, align: TextAlign) => void;
   onTextColorChange: (id: string, textColor: NodeTextColor) => void;
   onDetachNode: (id: string) => void;
+  onDetachConnection?: (parentId: string, childId: string) => void;
   onAttachNodes: (sourceId: string, targetId: string) => void;
   onDimensionsChange: (id: string, width: number, height: number) => void;
   onAddRoot: () => void;
@@ -55,6 +59,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   onTextAlignChange,
   onTextColorChange,
   onDetachNode,
+  onDetachConnection,
   onAttachNodes,
   onDimensionsChange,
   onAddRoot,
@@ -84,6 +89,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     isDragging: boolean;
     targetNodeId: string | null;
     isTargetInvalid: boolean;
+    targetInvalidReason?: string;
   } | null>(null);
 
   const dragConnectRef = useRef(dragConnect);
@@ -120,18 +126,24 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       });
 
       let isTargetInvalid = false;
+      let targetInvalidReason = '';
       if (hoveredNode) {
-        // Cycle check: cannot attach if target is already downstream of source
-        let curr: MindMapNode | undefined = hoveredNode;
-        const visited = new Set<string>();
-        while (curr && curr.parentId) {
-          if (curr.parentId === state.sourceNodeId) {
-            isTargetInvalid = true;
-            break;
-          }
-          if (visited.has(curr.parentId)) break;
-          visited.add(curr.parentId);
-          curr = nodes.find((n) => n.id === curr!.parentId);
+        if (hoveredNode.id === state.sourceNodeId) {
+          isTargetInvalid = true;
+          targetInvalidReason = 'SELF CONNECTION';
+        } else if (areNodesConnected(nodes, state.sourceNodeId, hoveredNode.id)) {
+          isTargetInvalid = true;
+          targetInvalidReason = 'ALREADY CONNECTED';
+        } else if (
+          MAX_CONNECTIONS_PER_NODE !== null &&
+          (getNodeTotalConnections(hoveredNode, nodes) >= MAX_CONNECTIONS_PER_NODE ||
+            getNodeTotalConnections(
+              nodes.find((n) => n.id === state.sourceNodeId) || hoveredNode,
+              nodes
+            ) >= MAX_CONNECTIONS_PER_NODE)
+        ) {
+          isTargetInvalid = true;
+          targetInvalidReason = `MAX CONNECTIONS (${MAX_CONNECTIONS_PER_NODE})`;
         }
       }
 
@@ -141,6 +153,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         isDragging,
         targetNodeId: hoveredNode?.id || null,
         isTargetInvalid,
+        targetInvalidReason,
       });
     };
 
@@ -345,6 +358,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
           nodes={nodes}
           selectedNodeId={selectedNodeId}
           onDetachNode={onDetachNode}
+          onDetachConnection={onDetachConnection}
           dragConnection={dragConnectionData}
         />
 
@@ -365,6 +379,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
             onStartConnect={handleStartConnect}
             isConnectTarget={dragConnect?.targetNodeId === node.id && !dragConnect.isTargetInvalid}
             isConnectInvalid={dragConnect?.targetNodeId === node.id && dragConnect.isTargetInvalid}
+            connectInvalidReason={dragConnect?.targetNodeId === node.id ? dragConnect.targetInvalidReason : undefined}
           />
         ))}
       </div>
@@ -375,6 +390,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         x={contextMenu.x}
         y={contextMenu.y}
         node={activeContextMenuNode}
+        nodes={nodes}
         onClose={handleCloseContextMenu}
         onAddChild={onAddChild}
         onAddSibling={onAddSibling}

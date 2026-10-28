@@ -25,6 +25,7 @@ export function App() {
     updateNodeTextAlign,
     updateNodeTextColor,
     detachNode,
+    detachConnection,
     attachNodes,
     duplicateNode,
     deleteNode,
@@ -221,6 +222,7 @@ export function App() {
         onTextAlignChange={updateNodeTextAlign}
         onTextColorChange={updateNodeTextColor}
         onDetachNode={detachNode}
+        onDetachConnection={detachConnection}
         onAttachNodes={attachNodes}
         onDimensionsChange={updateNodeDimensions}
         onAddRoot={handleAddRoot}

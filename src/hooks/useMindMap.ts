@@ -9,6 +9,10 @@ import {
   TextAlign,
   AdHocNote,
   ProjectSettings,
+  getNodeParentIds,
+  getNodeTotalConnections,
+  areNodesConnected,
+  MAX_CONNECTIONS_PER_NODE,
 } from '../types/mindmap';
 import { generateId } from '../lib/utils';
 
@@ -235,6 +239,7 @@ export function useMindMap() {
         const newNode: MindMapNode = {
           id: generateId('thought'),
           parentId: parent.id,
+          parentIds: [parent.id],
           text: '',
           x: newX,
           y: newY,
@@ -280,9 +285,11 @@ export function useMindMap() {
       const newX = node.x + (node.width || (node.shape === 'circle' ? 140 : 200)) + 50;
       const newY = node.y;
 
+      const nodeParents = getNodeParentIds(node);
       const newNode: MindMapNode = {
         id: generateId('sibling'),
-        parentId: node.parentId,
+        parentId: nodeParents[0] || null,
+        parentIds: nodeParents.length > 0 ? [...nodeParents] : [],
         text: '',
         x: newX,
         y: newY,
@@ -400,30 +407,63 @@ export function useMindMap() {
     }));
   }, []);
 
-  // Detach a node from its parent (leaves the node floating)
+  // Detach all connections to/from a node (leaves the node floating)
   const detachNode = useCallback((id: string) => {
     setHasUnsavedChanges(true);
     setDoc((prev) => ({
       ...prev,
       updatedAt: Date.now(),
-      nodes: prev.nodes.map((n) => (n.id === id ? { ...n, parentId: null } : n)),
+      nodes: prev.nodes.map((n) => {
+        if (n.id === id) {
+          return { ...n, parentId: null, parentIds: [] };
+        }
+        const parents = getNodeParentIds(n);
+        if (parents.includes(id)) {
+          const updated = parents.filter((p) => p !== id);
+          return {
+            ...n,
+            parentId: updated[0] || null,
+            parentIds: updated,
+          };
+        }
+        return n;
+      }),
     }));
   }, []);
 
-  // Check if possibleDescendant is downstream of ancestor
-  const isDescendantNode = (nodes: MindMapNode[], possibleDescendantId: string, ancestorId: string): boolean => {
-    let curr = nodes.find((n) => n.id === possibleDescendantId);
-    const visited = new Set<string>();
-    while (curr && curr.parentId) {
-      if (curr.parentId === ancestorId) return true;
-      if (visited.has(curr.parentId)) break;
-      visited.add(curr.parentId);
-      curr = nodes.find((n) => n.id === curr!.parentId);
-    }
-    return false;
-  };
+  // Detach a single specific connection between parentId and childId
+  const detachConnection = useCallback((parentId: string, childId: string) => {
+    setHasUnsavedChanges(true);
+    setDoc((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      nodes: prev.nodes.map((n) => {
+        if (n.id === childId) {
+          const currentParents = getNodeParentIds(n);
+          const updated = currentParents.filter((p) => p !== parentId);
+          return {
+            ...n,
+            parentId: updated[0] || null,
+            parentIds: updated,
+          };
+        }
+        if (n.id === parentId) {
+          const currentParents = getNodeParentIds(n);
+          if (currentParents.includes(childId)) {
+            const updated = currentParents.filter((p) => p !== childId);
+            return {
+              ...n,
+              parentId: updated[0] || null,
+              parentIds: updated,
+            };
+          }
+        }
+        return n;
+      }),
+    }));
+  }, []);
 
-  // Drag and attach node connection
+  // Drag and attach node connection (supports unlimited multiple connections per node)
   const attachNodes = useCallback((sourceId: string, targetId: string) => {
     if (sourceId === targetId) return;
 
@@ -433,52 +473,37 @@ export function useMindMap() {
       const targetNode = prev.nodes.find((n) => n.id === targetId);
       if (!sourceNode || !targetNode) return prev;
 
-      let childId: string;
-      let parentId: string;
+      // Do not allow duplicate connections between the same pair
+      if (areNodesConnected(prev.nodes, sourceId, targetId)) {
+        return prev;
+      }
 
-      if (sourceNode.parentId === null && targetNode.parentId !== null) {
-        // Source is floating -> source attaches to target
-        childId = sourceId;
-        parentId = targetId;
-      } else if (sourceNode.parentId !== null && targetNode.parentId === null) {
-        // Target is floating -> target attaches to source
-        childId = targetId;
-        parentId = sourceId;
-      } else if (sourceNode.parentId === null && targetNode.parentId === null) {
-        // Both floating: attach to the one that already has children, or source to target
-        const sourceHasChildren = prev.nodes.some((n) => n.parentId === sourceId);
-        const targetHasChildren = prev.nodes.some((n) => n.parentId === targetId);
-        if (!sourceHasChildren && targetHasChildren) {
-          childId = sourceId;
-          parentId = targetId;
-        } else if (sourceHasChildren && !targetHasChildren) {
-          childId = targetId;
-          parentId = sourceId;
-        } else {
-          childId = sourceId;
-          parentId = targetId;
-        }
-      } else {
-        // Both are attached: re-parent source to target unless it would cause cycle
-        if (!isDescendantNode(prev.nodes, targetId, sourceId)) {
-          childId = sourceId;
-          parentId = targetId;
-        } else if (!isDescendantNode(prev.nodes, sourceId, targetId)) {
-          childId = targetId;
-          parentId = sourceId;
-        } else {
+      // Check max connections limit if configured (null = unlimited)
+      if (MAX_CONNECTIONS_PER_NODE !== null) {
+        if (
+          getNodeTotalConnections(sourceNode, prev.nodes) >= MAX_CONNECTIONS_PER_NODE ||
+          getNodeTotalConnections(targetNode, prev.nodes) >= MAX_CONNECTIONS_PER_NODE
+        ) {
           return prev;
         }
       }
 
-      if (isDescendantNode(prev.nodes, parentId, childId)) {
-        return prev;
-      }
+      const currentParents = getNodeParentIds(targetNode);
+      const updatedParents = [...currentParents, sourceId];
 
       return {
         ...prev,
         updatedAt: Date.now(),
-        nodes: prev.nodes.map((n) => (n.id === childId ? { ...n, parentId } : n)),
+        nodes: prev.nodes.map((n) => {
+          if (n.id === targetId) {
+            return {
+              ...n,
+              parentId: updatedParents[0] || null,
+              parentIds: updatedParents,
+            };
+          }
+          return n;
+        }),
       };
     });
   }, []);
@@ -490,9 +515,12 @@ export function useMindMap() {
       const node = prev.nodes.find((n) => n.id === id);
       if (!node) return prev;
 
+      const parents = getNodeParentIds(node);
       const duplicated: MindMapNode = {
         ...node,
         id: generateId('copy'),
+        parentId: parents[0] || null,
+        parentIds: parents.length > 0 ? [...parents] : [],
         x: node.x + 30,
         y: node.y + 30,
         text: `${node.text} (COPY)`,
@@ -507,7 +535,7 @@ export function useMindMap() {
     });
   }, []);
 
-  // Delete node and cleanly re-parent children so downstream thoughts are preserved
+  // Delete node and cleanly re-parent or preserve remaining connections
   const deleteNode = useCallback((id: string) => {
     // Ensure body pointer-events is never left locked by any menu/dialog
     if (typeof document !== 'undefined') {
@@ -519,10 +547,31 @@ export function useMindMap() {
       const targetNode = prev.nodes.find((n) => n.id === id);
       if (!targetNode) return prev;
 
-      // Rewire direct children to the deleted node's parent (or null if target was root)
+      const targetParents = getNodeParentIds(targetNode);
+
+      // Clean up references to the deleted node in other nodes' parentIds
       const remainingNodes = prev.nodes
         .filter((n) => n.id !== id)
-        .map((n) => (n.parentId === id ? { ...n, parentId: targetNode.parentId } : n));
+        .map((n) => {
+          const currentParents = getNodeParentIds(n);
+          if (currentParents.includes(id)) {
+            const updated = currentParents.filter((p) => p !== id);
+            // If it now has no parents but deleted node had parents, rewire to first parent
+            if (updated.length === 0 && targetParents.length > 0) {
+              return {
+                ...n,
+                parentId: targetParents[0],
+                parentIds: [targetParents[0]],
+              };
+            }
+            return {
+              ...n,
+              parentId: updated[0] || null,
+              parentIds: updated,
+            };
+          }
+          return n;
+        });
 
       return {
         ...prev,
@@ -660,6 +709,7 @@ export function useMindMap() {
     updateNodeTextAlign,
     updateNodeTextColor,
     detachNode,
+    detachConnection,
     attachNodes,
     duplicateNode,
     deleteNode,

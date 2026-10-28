@@ -18,6 +18,7 @@ interface MindMapNodeComponentProps {
   onStartConnect?: (sourceNodeId: string, dir: NodeDirection, clientX: number, clientY: number) => void;
   isConnectTarget?: boolean;
   isConnectInvalid?: boolean;
+  connectInvalidReason?: string;
 }
 
 const TEXT_COLOR_STYLE_MAP: Record<NodeTextColor, string> = {
@@ -98,16 +99,21 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
   onStartConnect,
   isConnectTarget,
   isConnectInvalid,
+  connectInvalidReason,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isDraggingRef = useRef(false);
   const hasMovedRef = useRef(false);
   const isResizingRef = useRef(false);
+  const hasResizedRef = useRef(false);
+  const activeResizePointerIdRef = useRef<number | null>(null);
+  const activeStopResizingRef = useRef<(() => void) | null>(null);
 
-  const startPosRef = useRef({ x: 0, y: 0 });
+  const dragStartPosRef = useRef({ x: 0, y: 0 });
   const startNodePosRef = useRef({ x: 0, y: 0 });
-  const startDimensionsRef = useRef({ width: 0, height: 0 });
+  const resizeStartPosRef = useRef({ x: 0, y: 0 });
+  const resizeStartDimensionsRef = useRef({ width: 0, height: 0 });
   const lastGripClickRef = useRef<number>(0);
   const lastAutoFitRef = useRef<number>(0);
 
@@ -148,38 +154,59 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
     }
   }, [isEditing, shape, textAlign, node.height]);
 
+  // Cleanup active resize on unmount
+  useEffect(() => {
+    return () => {
+      if (activeStopResizingRef.current) {
+        activeStopResizingRef.current();
+      }
+      isResizingRef.current = false;
+      isDraggingRef.current = false;
+    };
+  }, []);
+
   // Pointer drag for moving node
   const handlePointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button, textarea, input')) {
+    if ((e.target as HTMLElement).closest('button, textarea, input, [data-resize-handle="true"]')) {
       return;
     }
     if (e.button !== 0) return;
-    if (isResizingRef.current) return;
+
+    // Safety: ensure resize flag is clear so dragging node never freezes
+    isResizingRef.current = false;
 
     e.stopPropagation();
     onSelect(node.id);
 
     isDraggingRef.current = true;
     hasMovedRef.current = false;
-    startPosRef.current = { x: e.clientX, y: e.clientY };
+    dragStartPosRef.current = { x: e.clientX, y: e.clientY };
     startNodePosRef.current = { x: node.x, y: node.y };
 
     const target = e.currentTarget as HTMLElement;
-    target.setPointerCapture(e.pointerId);
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (isResizingRef.current) return;
     if (!isDraggingRef.current) return;
+    if (e.buttons === 0) {
+      isDraggingRef.current = false;
+      return;
+    }
     e.stopPropagation();
 
-    const dist = Math.hypot(e.clientX - startPosRef.current.x, e.clientY - startPosRef.current.y);
+    const dist = Math.hypot(e.clientX - dragStartPosRef.current.x, e.clientY - dragStartPosRef.current.y);
     if (dist > 3) {
       hasMovedRef.current = true;
     }
 
-    const dx = (e.clientX - startPosRef.current.x) / zoom;
-    const dy = (e.clientY - startPosRef.current.y) / zoom;
+    const dx = (e.clientX - dragStartPosRef.current.x) / zoom;
+    const dy = (e.clientY - dragStartPosRef.current.y) / zoom;
 
     onMove(node.id, Math.round(startNodePosRef.current.x + dx), Math.round(startNodePosRef.current.y + dy));
   };
@@ -195,56 +222,98 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
     }
   };
 
-  // Click-and-drag resizing
+  // Click-and-drag resizing with global window listeners to guarantee clean release
   const handleResizePointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
     e.stopPropagation();
-    isResizingRef.current = true;
+    e.preventDefault();
 
-    startPosRef.current = { x: e.clientX, y: e.clientY };
-    startDimensionsRef.current = {
-      width: node.width || (shape === 'circle' ? 140 : 200),
-      height: node.height || (shape === 'circle' ? 140 : 70),
+    // If an existing resize session is somehow active, terminate it first
+    if (activeStopResizingRef.current) {
+      activeStopResizingRef.current();
+    }
+
+    isResizingRef.current = true;
+    hasResizedRef.current = false;
+    activeResizePointerIdRef.current = e.pointerId;
+
+    resizeStartPosRef.current = { x: e.clientX, y: e.clientY };
+    const initialCircleSize = Math.max(node.width || 140, node.height || 140, 140);
+    resizeStartDimensionsRef.current = {
+      width: shape === 'circle' ? initialCircleSize : (node.width || 200),
+      height: shape === 'circle' ? initialCircleSize : (node.height || 70),
     };
 
     const target = e.currentTarget as HTMLElement;
-    target.setPointerCapture(e.pointerId);
-  };
-
-  const handleResizePointerMove = (e: React.PointerEvent) => {
-    if (!isResizingRef.current) return;
-    e.stopPropagation();
-
-    const dist = Math.hypot(e.clientX - startPosRef.current.x, e.clientY - startPosRef.current.y);
-    if (dist < 3) return;
-
-    const dx = (e.clientX - startPosRef.current.x) / zoom;
-    const dy = (e.clientY - startPosRef.current.y) / zoom;
-
-    if (shape === 'circle') {
-      const delta = Math.max(dx, dy);
-      const newSize = Math.max(60, Math.min(500, startDimensionsRef.current.width + delta));
-      if (onDimensionsChange) {
-        onDimensionsChange(node.id, Math.round(newSize), Math.round(newSize));
-      }
-    } else {
-      const newWidth = Math.max(50, Math.min(650, startDimensionsRef.current.width + dx));
-      const newHeight = Math.max(40, Math.min(500, startDimensionsRef.current.height + dy));
-
-      if (onDimensionsChange) {
-        onDimensionsChange(node.id, Math.round(newWidth), Math.round(newHeight));
-      }
+    try {
+      target.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
     }
-  };
 
-  const handleResizePointerUp = (e: React.PointerEvent) => {
-    if (isResizingRef.current) {
+    const onWindowPointerMove = (ev: PointerEvent) => {
+      if (!isResizingRef.current) return;
+      // If mouse button was released anywhere, immediately stop resizing
+      if (ev.buttons === 0) {
+        stopResizing();
+        return;
+      }
+
+      const dist = Math.hypot(ev.clientX - resizeStartPosRef.current.x, ev.clientY - resizeStartPosRef.current.y);
+      if (dist > 3) {
+        hasResizedRef.current = true;
+      } else {
+        return;
+      }
+
+      const dx = (ev.clientX - resizeStartPosRef.current.x) / zoom;
+      const dy = (ev.clientY - resizeStartPosRef.current.y) / zoom;
+
+      if (shape === 'circle') {
+        // Diagonal projection: (dx + dy) / 2 provides smooth, symmetric scaling along both axes
+        const delta = (dx + dy) / 2;
+        const newSize = Math.max(60, Math.min(500, resizeStartDimensionsRef.current.width + delta));
+        const rounded = Math.round(newSize);
+        if (onDimensionsChange) {
+          onDimensionsChange(node.id, rounded, rounded);
+        }
+      } else {
+        const newWidth = Math.max(50, Math.min(650, resizeStartDimensionsRef.current.width + dx));
+        const newHeight = Math.max(40, Math.min(500, resizeStartDimensionsRef.current.height + dy));
+
+        if (onDimensionsChange) {
+          onDimensionsChange(node.id, Math.round(newWidth), Math.round(newHeight));
+        }
+      }
+    };
+
+    const stopResizing = (ev?: Event) => {
+      if (ev) {
+        ev.stopPropagation();
+      }
       isResizingRef.current = false;
-      try {
-        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {
-        // ignore
+      activeStopResizingRef.current = null;
+
+      window.removeEventListener('pointermove', onWindowPointerMove);
+      window.removeEventListener('pointerup', stopResizing);
+      window.removeEventListener('pointercancel', stopResizing);
+      window.removeEventListener('blur', stopResizing);
+
+      if (activeResizePointerIdRef.current !== null) {
+        try {
+          target.releasePointerCapture(activeResizePointerIdRef.current);
+        } catch {
+          // ignore
+        }
+        activeResizePointerIdRef.current = null;
       }
-    }
+    };
+
+    activeStopResizingRef.current = stopResizing;
+    window.addEventListener('pointermove', onWindowPointerMove);
+    window.addEventListener('pointerup', stopResizing);
+    window.addEventListener('pointercancel', stopResizing);
+    window.addEventListener('blur', stopResizing);
   };
 
   // Auto-compress box to tightly fit content with equal padding on all sides
@@ -340,6 +409,11 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
 
   const handleGripClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // If user just finished a drag-resize, ignore the trailing click event
+    if (hasResizedRef.current) {
+      hasResizedRef.current = false;
+      return;
+    }
     const now = Date.now();
     if (now - lastGripClickRef.current < 350) {
       triggerAutoFit();
@@ -387,9 +461,10 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
       id={`mindmap-node-${node.id}`}
       style={{
         transform: `translate3d(${node.x}px, ${node.y}px, 0)`,
-        width: `${node.width || (shape === 'circle' ? 140 : 200)}px`,
-        height: shape === 'circle' ? `${node.height || node.width || 140}px` : undefined,
-        minHeight: `${node.height || (shape === 'circle' ? 140 : 70)}px`,
+        width: `${shape === 'circle' ? (node.width || node.height || 140) : (node.width || 200)}px`,
+        height: `${shape === 'circle' ? (node.height || node.width || 140) : (node.height || 70)}px`,
+        minHeight: `${shape === 'circle' ? (node.height || node.width || 140) : (node.height || 70)}px`,
+        maxHeight: shape === 'circle' ? `${node.height || node.width || 140}px` : undefined,
         touchAction: 'none',
       }}
       className={cn(
@@ -421,14 +496,14 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
       }}
     >
       {/* Target Attachment HUD Indicator */}
-      {isConnectTarget && (
+      {isConnectTarget && !isConnectInvalid && (
         <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded bg-cyan-500 text-black font-mono text-[9px] font-bold tracking-wider uppercase shadow-[0_0_12px_rgba(6,182,212,0.8)] pointer-events-none animate-pulse whitespace-nowrap z-50">
           ATTACH TO NODE
         </div>
       )}
-      {isConnectInvalid && (
+      {isConnectTarget && isConnectInvalid && (
         <div className="absolute -top-7 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded bg-rose-500 text-white font-mono text-[9px] font-bold tracking-wider uppercase shadow-[0_0_12px_rgba(244,63,94,0.8)] pointer-events-none whitespace-nowrap z-50">
-          INVALID TARGET (LOOP)
+          {connectInvalidReason || 'ALREADY CONNECTED'}
         </div>
       )}
       {/* Tactical Corner Brackets (for square shape) */}
@@ -576,9 +651,8 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
 
       {/* Interactive Bottom-Right Click-and-Drag Resizing Grip */}
       <div
+        data-resize-handle="true"
         onPointerDown={handleResizePointerDown}
-        onPointerMove={handleResizePointerMove}
-        onPointerUp={handleResizePointerUp}
         onClick={handleGripClick}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -586,9 +660,9 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
         }}
         title="Drag to resize (Double-click to auto-fit content)"
         className={cn(
-          'absolute bottom-0 right-0 w-4 h-4 z-30 cursor-se-resize',
-          'opacity-0 group-hover:opacity-80 transition-opacity',
-          'flex items-center justify-center'
+          'absolute z-30 cursor-se-resize flex items-center justify-center transition-opacity',
+          shape === 'circle' ? 'bottom-2 right-2 w-4 h-4' : 'bottom-0 right-0 w-4 h-4',
+          'opacity-0 group-hover:opacity-80'
         )}
       >
         <div className={cn('w-2 h-2 border-r-2 border-b-2', theme.bracket)} />
