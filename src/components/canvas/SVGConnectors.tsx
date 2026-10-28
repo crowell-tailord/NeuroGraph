@@ -155,6 +155,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
 
   return (
     <svg
+      id="mindmap-svg-connectors"
       className="absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible"
       style={{ zIndex: 0 }}
     >

@@ -632,10 +632,10 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
               setIsEditing(true);
             }}
             className={cn(
-              'w-full cursor-text overflow-hidden prose-invert prose-xs break-words',
+              'w-full cursor-text overflow-visible prose-invert prose-xs break-words pb-0.5',
               '[&_p]:text-inherit [&_h1]:text-inherit [&_h2]:text-inherit [&_li]:text-inherit [&_strong]:text-inherit [&_em]:text-inherit',
-              shape === 'square' && 'h-full',
-              '[&_p]:m-0 [&_ul]:pl-3.5 [&_ul]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h1]:font-bold [&_h1]:my-1 [&_h2]:text-xs [&_h2]:font-bold [&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded',
+              shape === 'square' && 'min-h-full',
+              '[&_p]:m-0 [&_p]:leading-relaxed [&_ul]:pl-3.5 [&_ul]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h1]:font-bold [&_h1]:my-1 [&_h2]:text-xs [&_h2]:font-bold [&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded',
               shape === 'circle' && textAlign === 'center' ? 'text-center' : alignClass
             )}
             dangerouslySetInnerHTML={{ __html: renderedMarkdown }}
