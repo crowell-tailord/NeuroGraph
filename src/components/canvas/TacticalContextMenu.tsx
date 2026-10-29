@@ -13,8 +13,9 @@ import {
   AlignRight,
   Unlink,
   Type,
+  ALargeSmall,
 } from 'lucide-react';
-import { MindMapNode, NodeColor, NodeTextColor, NodeShape, TextAlign, getNodeTotalConnections } from '../../types/mindmap';
+import { MindMapNode, NodeColor, NodeTextColor, NodeShape, TextAlign, NodeTextSize, getNodeTotalConnections } from '../../types/mindmap';
 import { cn } from '../../lib/utils';
 
 interface TacticalContextMenuProps {
@@ -32,6 +33,7 @@ interface TacticalContextMenuProps {
   onShapeChange: (id: string, shape: NodeShape) => void;
   onTextAlignChange: (id: string, align: TextAlign) => void;
   onTextColorChange: (id: string, textColor: NodeTextColor) => void;
+  onTextSizeChange: (id: string, textSize: NodeTextSize) => void;
   onDetachNode?: (id: string) => void;
 }
 
@@ -69,6 +71,7 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
   onShapeChange,
   onTextAlignChange,
   onTextColorChange,
+  onTextSizeChange,
   onDetachNode,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -107,12 +110,13 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
 
   // Clamp menu position to stay completely inside viewport bounds
   const menuWidth = 205;
-  const menuHeight = totalConnections > 0 ? 420 : 385;
+  const menuHeight = totalConnections > 0 ? 465 : 430;
   const safeX = Math.min(Math.max(x, 10), window.innerWidth - menuWidth - 10);
   const safeY = Math.min(Math.max(y, 10), window.innerHeight - menuHeight - 10);
 
   const shape = node.shape || 'square';
   const textAlign = node.textAlign || (node.shape === 'circle' ? 'center' : 'left');
+  const textSize = node.textSize || 'normal';
 
   return (
     <div
@@ -276,6 +280,58 @@ export const TacticalContextMenu: React.FC<TacticalContextMenuProps> = ({
           >
             <AlignRight className="w-3 h-3" />
             <span>Right</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Text Size Selector (normal, large, xlarge) */}
+      <div className="px-2 py-1.5 border-t border-white/[0.06] my-1">
+        <div className="text-[9px] uppercase tracking-wider text-slate-500 mb-1.5 font-semibold flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <ALargeSmall className="w-3 h-3 text-rose-400" />
+            <span>Text Size</span>
+          </div>
+          <span className="text-[8px] text-slate-500 uppercase">{textSize}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-1">
+          <button
+            type="button"
+            title="Normal text scale (12px)"
+            onClick={() => onTextSizeChange(node.id, 'normal')}
+            className={cn(
+              'flex items-center justify-center gap-1 py-1 px-1 rounded text-[10px] font-mono cursor-pointer transition-all border',
+              textSize === 'normal'
+                ? 'bg-rose-500/25 border-rose-500/60 text-rose-300 font-bold shadow-[0_0_8px_rgba(244,63,94,0.3)]'
+                : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.08]'
+            )}
+          >
+            <span>Normal</span>
+          </button>
+          <button
+            type="button"
+            title="Large text scale (20px)"
+            onClick={() => onTextSizeChange(node.id, 'large')}
+            className={cn(
+              'flex items-center justify-center gap-1 py-1 px-1 rounded text-[10px] font-mono cursor-pointer transition-all border',
+              textSize === 'large'
+                ? 'bg-rose-500/25 border-rose-500/60 text-rose-300 font-bold shadow-[0_0_8px_rgba(244,63,94,0.3)]'
+                : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.08]'
+            )}
+          >
+            <span>Large</span>
+          </button>
+          <button
+            type="button"
+            title="X-Large text scale (32px)"
+            onClick={() => onTextSizeChange(node.id, 'xlarge')}
+            className={cn(
+              'flex items-center justify-center gap-1 py-1 px-1 rounded text-[10px] font-mono cursor-pointer transition-all border',
+              textSize === 'xlarge'
+                ? 'bg-rose-500/25 border-rose-500/60 text-rose-300 font-bold shadow-[0_0_8px_rgba(244,63,94,0.3)]'
+                : 'bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.08]'
+            )}
+          >
+            <span>X-Large</span>
           </button>
         </div>
       </div>

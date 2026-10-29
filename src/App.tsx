@@ -7,6 +7,7 @@ import { MindMapCanvas } from './components/canvas/MindMapCanvas';
 import { FloatingMenu } from './components/dock/FloatingMenu';
 import { OpenMapModal } from './components/dialogs/OpenMapModal';
 import { ProjectSettingsModal } from './components/dialogs/ProjectSettingsModal';
+import { OutlineModal } from './components/dialogs/OutlineModal';
 import { MindMapDocument, NodeDirection } from './types/mindmap';
 
 export function App() {
@@ -24,6 +25,9 @@ export function App() {
     updateNodeShape,
     updateNodeTextAlign,
     updateNodeTextColor,
+    updateNodeLineType,
+    updateConnectionLineType,
+    updateNodeTextSize,
     detachNode,
     detachConnection,
     attachNodes,
@@ -58,6 +62,7 @@ export function App() {
 
   const [openMapModalVisible, setOpenMapModalVisible] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [outlineModalOpen, setOutlineModalOpen] = useState(false);
 
   // When adding child node in any direction, smoothly slide canvas to center on new node
   const handleAddChild = useCallback(
@@ -210,6 +215,7 @@ export function App() {
         nodes={doc.nodes}
         viewport={viewport}
         selectedNodeId={selectedNodeId}
+        lineRouting={doc.settings?.lineRouting || 'curved'}
         onSelectNode={setSelectedNodeId}
         onMoveNode={updateNodePosition}
         onTextChange={updateNodeText}
@@ -221,6 +227,9 @@ export function App() {
         onShapeChange={updateNodeShape}
         onTextAlignChange={updateNodeTextAlign}
         onTextColorChange={updateNodeTextColor}
+        onLineTypeChange={updateNodeLineType}
+        onUpdateConnectionLineType={updateConnectionLineType}
+        onTextSizeChange={updateNodeTextSize}
         onDetachNode={detachNode}
         onDetachConnection={detachConnection}
         onAttachNodes={attachNodes}
@@ -241,6 +250,7 @@ export function App() {
         }}
         onOpenMapModal={() => setOpenMapModalVisible(true)}
         onOpenSettings={() => setSettingsModalOpen(true)}
+        onOpenOutline={() => setOutlineModalOpen(true)}
         onSaveMap={() => saveMapToBackend()}
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
@@ -264,6 +274,18 @@ export function App() {
         settings={doc.settings || { defaultColor: 'red', defaultShape: 'square' }}
         saveStatus={saveStatus}
         onUpdateSettings={updateProjectSettings}
+      />
+
+      {/* Outline View Modal */}
+      <OutlineModal
+        open={outlineModalOpen}
+        onOpenChange={setOutlineModalOpen}
+        nodes={doc.nodes}
+        selectedNodeId={selectedNodeId}
+        onSelectNode={(node) => {
+          setSelectedNodeId(node.id);
+          panToNode(node, false);
+        }}
       />
     </div>
   );

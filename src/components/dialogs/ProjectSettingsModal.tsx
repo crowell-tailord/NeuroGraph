@@ -10,8 +10,12 @@ import {
   Info,
   CheckCircle2,
   RefreshCw,
+  Route,
+  ALargeSmall,
+  Spline,
+  GitBranch,
 } from 'lucide-react';
-import { NodeColor, NodeShape, ProjectSettings } from '../../types/mindmap';
+import { NodeColor, NodeShape, LineType, NodeTextSize, LineRouting, ProjectSettings } from '../../types/mindmap';
 import { cn } from '../../lib/utils';
 
 interface ProjectSettingsModalProps {
@@ -107,6 +111,70 @@ const SHAPE_OPTIONS: {
   },
 ];
 
+const LINE_TYPE_OPTIONS: {
+  id: LineType;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: 'solid',
+    label: 'Solid Line',
+    description: 'Standard tactical continuous connection line',
+  },
+  {
+    id: 'double',
+    label: 'Double Line',
+    description: 'Dual parallel precision lines with dark center core',
+  },
+  {
+    id: 'dotted',
+    label: 'Dotted Line',
+    description: 'Tactical dotted round sequence connection line',
+  },
+];
+
+const TEXT_SIZE_OPTIONS: {
+  id: NodeTextSize;
+  label: string;
+  description: string;
+}[] = [
+  {
+    id: 'normal',
+    label: 'Normal',
+    description: 'Standard tactical terminal text scale (12px)',
+  },
+  {
+    id: 'large',
+    label: 'Large',
+    description: 'Enhanced readability scale (20px)',
+  },
+  {
+    id: 'xlarge',
+    label: 'X-Large',
+    description: 'Maximum legibility high-impact scale (32px)',
+  },
+];
+
+const LINE_ROUTING_OPTIONS: {
+  id: LineRouting;
+  label: string;
+  description: string;
+  icon: React.ElementType;
+}[] = [
+  {
+    id: 'curved',
+    label: 'Curved Lines (Current)',
+    description: 'Smooth flowing organic cubic Bezier curves',
+    icon: Spline,
+  },
+  {
+    id: 'hard',
+    label: 'Hard Lines',
+    description: '90-degree turns and straight orthogonal segments',
+    icon: GitBranch,
+  },
+];
+
 export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   open,
   onOpenChange,
@@ -116,6 +184,9 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
 }) => {
   const currentColor = settings.defaultColor || 'red';
   const currentShape = settings.defaultShape || 'square';
+  const currentLineType = settings.defaultLineType || 'solid';
+  const currentTextSize = settings.defaultTextSize || 'normal';
+  const currentLineRouting = settings.lineRouting || 'curved';
 
   const activeColorMeta = COLOR_OPTIONS.find((c) => c.id === currentColor) || COLOR_OPTIONS[0];
 
@@ -262,6 +333,175 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               </div>
             </div>
 
+            {/* Setting 3: Default Line Type */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                  <Route className="w-3.5 h-3.5 text-amber-400" />
+                  Default Line Type
+                </label>
+                <span className="text-[11px] font-semibold tracking-wider uppercase text-amber-400">
+                  {currentLineType}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Sets the default connector vector stroke style for newly spawned branches.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {LINE_TYPE_OPTIONS.map((lt) => {
+                  const isSelected = currentLineType === lt.id;
+                  return (
+                    <button
+                      key={lt.id}
+                      type="button"
+                      onClick={() => onUpdateSettings({ defaultLineType: lt.id })}
+                      className={cn(
+                        'flex flex-col gap-1 p-2.5 rounded-sm border transition-all cursor-pointer text-left',
+                        isSelected
+                          ? 'bg-white/[0.07] border-amber-500/60 ring-1 ring-amber-500/30 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
+                          : 'bg-[#121622]/60 border-white/[0.06] hover:bg-white/[0.04] hover:border-white/20'
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={cn(
+                            'text-xs font-bold tracking-wider uppercase',
+                            isSelected ? 'text-white' : 'text-slate-300'
+                          )}
+                        >
+                          {lt.label}
+                        </span>
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-amber-400 stroke-[2.5]" />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-snug">
+                        {lt.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Setting 4: Default Text Size */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                  <ALargeSmall className="w-3.5 h-3.5 text-rose-400" />
+                  Default Text Size
+                </label>
+                <span className="text-[11px] font-semibold tracking-wider uppercase text-rose-400">
+                  {currentTextSize}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Sets default font scale for newly created thoughts across the project schematic.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {TEXT_SIZE_OPTIONS.map((ts) => {
+                  const isSelected = currentTextSize === ts.id;
+                  return (
+                    <button
+                      key={ts.id}
+                      type="button"
+                      onClick={() => onUpdateSettings({ defaultTextSize: ts.id })}
+                      className={cn(
+                        'flex flex-col gap-1 p-2.5 rounded-sm border transition-all cursor-pointer text-left',
+                        isSelected
+                          ? 'bg-white/[0.07] border-rose-500/60 ring-1 ring-rose-500/30 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+                          : 'bg-[#121622]/60 border-white/[0.06] hover:bg-white/[0.04] hover:border-white/20'
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={cn(
+                            'text-xs font-bold tracking-wider uppercase',
+                            isSelected ? 'text-white' : 'text-slate-300'
+                          )}
+                        >
+                          {ts.label}
+                        </span>
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-rose-400 stroke-[2.5]" />
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-snug">
+                        {ts.description}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Setting 5: Line Types (Curved vs Hard Lines) */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+                  <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
+                  Connector Line Types
+                </label>
+                <span className="text-[11px] font-semibold tracking-wider uppercase text-cyan-400">
+                  {currentLineRouting === 'hard' ? 'Hard Lines' : 'Curved Lines'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-3">
+                Choose between smooth organic curves or hard lines with 90-degree turns and straight paths.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {LINE_ROUTING_OPTIONS.map((opt) => {
+                  const isSelected = currentLineRouting === opt.id;
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => onUpdateSettings({ lineRouting: opt.id })}
+                      className={cn(
+                        'flex items-start gap-3 p-3 rounded-sm border transition-all cursor-pointer text-left',
+                        isSelected
+                          ? 'bg-white/[0.07] border-cyan-500/60 ring-1 ring-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
+                          : 'bg-[#121622]/60 border-white/[0.06] hover:bg-white/[0.04] hover:border-white/20'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'p-2 rounded mt-0.5 shrink-0 border',
+                          isSelected
+                            ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                            : 'bg-white/[0.04] border-white/10 text-slate-400'
+                        )}
+                      >
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={cn(
+                              'text-xs font-bold tracking-wider uppercase',
+                              isSelected ? 'text-white' : 'text-slate-300'
+                            )}
+                          >
+                            {opt.label}
+                          </span>
+                          {isSelected && (
+                            <Check className="w-3.5 h-3.5 text-cyan-400 stroke-[2.5]" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">
+                          {opt.description}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Live Interactive Preview Box */}
             <div className="p-3.5 rounded-sm bg-[#090b10] border border-white/[0.08]">
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/[0.06]">
@@ -282,7 +522,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     activeColorMeta.glowClass,
                     currentShape === 'circle'
                       ? 'w-32 h-32 rounded-full flex flex-col items-center justify-center p-4 text-center'
-                      : 'w-52 h-20 rounded-sm p-3 flex flex-col justify-between'
+                      : 'w-52 h-20 rounded-sm p-3 flex flex-col justify-center'
                   )}
                 >
                   {/* Tactical Brackets for Square */}
@@ -304,9 +544,18 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-[11px] text-slate-400 tracking-wide font-mono mt-1">
+                  <div
+                    className={cn(
+                      'text-slate-400 tracking-wide font-mono mt-1',
+                      currentTextSize === 'xlarge'
+                        ? 'text-base font-bold'
+                        : currentTextSize === 'large'
+                        ? 'text-[13px] font-semibold'
+                        : 'text-[11px]'
+                    )}
+                  >
                     {currentShape === 'circle' ? (
-                      <span className="text-[10px] leading-tight block text-slate-300">
+                      <span className="leading-tight block text-slate-300">
                         Central Thought
                       </span>
                     ) : (

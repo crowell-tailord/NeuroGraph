@@ -13,6 +13,7 @@ import {
   Code2,
   RotateCcw,
   Sliders,
+  ListTree,
 } from 'lucide-react';
 import { MindMapDocument } from '../../types/mindmap';
 import { exportToPDF, exportToPNG } from '../../utils/pdfExport';
@@ -23,6 +24,7 @@ interface FloatingMenuProps {
   onNewMap: () => void;
   onOpenMapModal: () => void;
   onOpenSettings?: () => void;
+  onOpenOutline?: () => void;
   onSaveMap: () => Promise<boolean>;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -36,6 +38,7 @@ export const FloatingMenu: React.FC<FloatingMenuProps> = ({
   onNewMap,
   onOpenMapModal,
   onOpenSettings,
+  onOpenOutline,
   onSaveMap,
   onZoomIn,
   onZoomOut,
@@ -142,6 +145,19 @@ export const FloatingMenu: React.FC<FloatingMenuProps> = ({
           >
             <Sliders className="w-3.5 h-3.5 text-rose-400" />
             <span className="hidden sm:inline">Settings</span>
+          </button>
+        )}
+
+        {/* Outline View */}
+        {onOpenOutline && (
+          <button
+            type="button"
+            onClick={onOpenOutline}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors cursor-pointer text-slate-300 hover:text-white"
+            title="Outline View: View nodes as a bullet list outline"
+          >
+            <ListTree className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">Outline</span>
           </button>
         )}
 

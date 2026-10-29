@@ -1,5 +1,5 @@
 import React from 'react';
-import { MindMapNode, NodeColor, getNodeParentIds } from '../../types/mindmap';
+import { MindMapNode, NodeColor, LineType, LineRouting, getNodeParentIds } from '../../types/mindmap';
 
 export interface DragConnectionData {
   path: string;
@@ -14,8 +14,11 @@ export interface DragConnectionData {
 interface SVGConnectorsProps {
   nodes: MindMapNode[];
   selectedNodeId: string | null;
+  lineRouting?: LineRouting;
   onDetachNode?: (nodeId: string) => void;
   onDetachConnection?: (parentId: string, childId: string) => void;
+  onOpenContextMenu?: (nodeId: string, x: number, y: number) => void;
+  onOpenPathMenu?: (parentId: string, childId: string, x: number, y: number, currentLineType: LineType) => void;
   dragConnection?: DragConnectionData | null;
 }
 
@@ -31,8 +34,11 @@ const COLOR_MAP: Record<NodeColor, { stroke: string; glow: string; dot: string }
 export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
   nodes,
   selectedNodeId,
+  lineRouting = 'curved',
   onDetachNode,
   onDetachConnection,
+  onOpenContextMenu,
+  onOpenPathMenu,
   dragConnection,
 }) => {
   const nodeMap = React.useMemo(() => {
@@ -49,6 +55,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
       childId: string;
       path: string;
       color: NodeColor;
+      lineType: LineType;
       isSelected: boolean;
       startX: number;
       startY: number;
@@ -99,16 +106,24 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
             startY = parent.y + pH;
             endX = childCenterX;
             endY = child.y;
-            const cpOffset = Math.max(Math.abs(dy) * 0.5, 25);
-            path = `M ${startX} ${startY} C ${startX} ${startY + cpOffset}, ${endX} ${endY - cpOffset}, ${endX} ${endY}`;
           } else {
             // Child is above parent
             startX = parentCenterX;
             startY = parent.y;
             endX = childCenterX;
             endY = child.y + cH;
+          }
+
+          if (lineRouting === 'hard') {
+            const midY = Math.round(startY + (endY - startY) / 2);
+            path = `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+          } else {
             const cpOffset = Math.max(Math.abs(dy) * 0.5, 25);
-            path = `M ${startX} ${startY} C ${startX} ${startY - cpOffset}, ${endX} ${endY + cpOffset}, ${endX} ${endY}`;
+            if (dy >= 0) {
+              path = `M ${startX} ${startY} C ${startX} ${startY + cpOffset}, ${endX} ${endY - cpOffset}, ${endX} ${endY}`;
+            } else {
+              path = `M ${startX} ${startY} C ${startX} ${startY - cpOffset}, ${endX} ${endY + cpOffset}, ${endX} ${endY}`;
+            }
           }
         } else {
           // Horizontal connection
@@ -118,20 +133,34 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
             startY = parentCenterY;
             endX = child.x;
             endY = childCenterY;
-            const cpOffset = Math.max(Math.abs(dx) * 0.5, 25);
-            path = `M ${startX} ${startY} C ${startX + cpOffset} ${startY}, ${endX - cpOffset} ${endY}, ${endX} ${endY}`;
           } else {
             // Child is to the left of parent
             startX = parent.x;
             startY = parentCenterY;
             endX = child.x + cW;
             endY = childCenterY;
+          }
+
+          if (lineRouting === 'hard') {
+            const midX = Math.round(startX + (endX - startX) / 2);
+            path = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+          } else {
             const cpOffset = Math.max(Math.abs(dx) * 0.5, 25);
-            path = `M ${startX} ${startY} C ${startX - cpOffset} ${startY}, ${endX + cpOffset} ${endY}, ${endX} ${endY}`;
+            if (dx >= 0) {
+              path = `M ${startX} ${startY} C ${startX + cpOffset} ${startY}, ${endX - cpOffset} ${endY}, ${endX} ${endY}`;
+            } else {
+              path = `M ${startX} ${startY} C ${startX - cpOffset} ${startY}, ${endX + cpOffset} ${endY}, ${endX} ${endY}`;
+            }
           }
         }
 
         const isSelected = selectedNodeId === child.id || selectedNodeId === parent.id;
+        const lineType: LineType =
+          child.connectionLineTypes?.[parentId] ||
+          parent.connectionLineTypes?.[child.id] ||
+          child.lineType ||
+          parent.lineType ||
+          'solid';
 
         items.push({
           id: `${parent.id}->${child.id}`,
@@ -139,6 +168,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
           childId: child.id,
           path,
           color: child.color || parent.color || 'red',
+          lineType,
           isSelected,
           startX,
           startY,
@@ -151,7 +181,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
     });
 
     return items;
-  }, [nodes, nodeMap, selectedNodeId]);
+  }, [nodes, nodeMap, selectedNodeId, lineRouting]);
 
   return (
     <svg
@@ -175,27 +205,55 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
             className="group/connector"
             style={{ pointerEvents: 'auto' }}
           >
-            {/* Background halo glow line */}
-            <path
-              d={c.path}
-              fill="none"
-              stroke={theme.glow}
-              strokeWidth={c.isSelected ? 4 : 2}
-              strokeLinecap="round"
-              className="connector-glow-line transition-[stroke,stroke-width] duration-75"
-            />
+            {/* Background halo glow line (omitted for dotted lines so only dashes show with zero background color) */}
+            {c.lineType !== 'dotted' && (
+              <path
+                d={c.path}
+                fill="none"
+                stroke={theme.glow}
+                strokeWidth={
+                  c.lineType === 'double'
+                    ? c.isSelected ? 13 : 11
+                    : c.isSelected ? 4 : 2
+                }
+                strokeLinecap="round"
+                className="connector-glow-line transition-[stroke,stroke-width] duration-75"
+              />
+            )}
 
             {/* Main tactical sharp vector line (turns red marching ants on hover to delete) */}
             <path
               d={c.path}
               fill="none"
               stroke={theme.stroke}
-              strokeWidth={c.isSelected ? 2 : 1.5}
-              strokeOpacity={c.isSelected ? 1 : 0.8}
-              strokeDasharray={c.isSelected ? '4 2' : undefined}
+              strokeWidth={
+                c.lineType === 'double'
+                  ? c.isSelected ? 9.5 : 8
+                  : c.lineType === 'dotted'
+                  ? c.isSelected ? 2.5 : 2
+                  : c.isSelected ? 2 : 1.5
+              }
+              strokeOpacity={c.isSelected ? 1 : 0.85}
+              strokeDasharray={
+                c.lineType === 'dotted'
+                  ? '2 5'
+                  : c.isSelected ? '4 2' : undefined
+              }
               strokeLinecap="round"
               className="connector-tactical-line transition-[stroke,stroke-width,stroke-opacity] duration-75"
             />
+
+            {/* Double line center gap */}
+            {c.lineType === 'double' && (
+              <path
+                d={c.path}
+                fill="none"
+                stroke="#08090c"
+                strokeWidth={c.isSelected ? 5.5 : 5}
+                strokeLinecap="round"
+                className="connector-tactical-line-inner pointer-events-none transition-opacity duration-75"
+              />
+            )}
 
             {/* Wide transparent hover target line with real SVG pointer-events */}
             <path
@@ -204,13 +262,22 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
               stroke="transparent"
               strokeWidth={32}
               style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (onOpenPathMenu) {
+                  onOpenPathMenu(c.parentId, c.childId, e.clientX, e.clientY, c.lineType);
+                } else if (onOpenContextMenu) {
+                  onOpenContextMenu(c.childId, e.clientX, e.clientY);
+                }
+              }}
             />
 
             {/* Parent origin terminal dot */}
             <circle
               cx={c.startX}
               cy={c.startY}
-              r={2.5}
+              r={c.lineType === 'double' ? 3.5 : 2.5}
               fill={theme.dot}
               stroke="#08090c"
               strokeWidth={1}
@@ -221,7 +288,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
             <circle
               cx={c.endX}
               cy={c.endY}
-              r={3}
+              r={c.lineType === 'double' ? 4 : 3}
               fill="#08090c"
               stroke={theme.dot}
               strokeWidth={1.5}
@@ -244,6 +311,13 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
                     onDetachConnection(c.parentId, c.childId);
                   } else if (onDetachNode) {
                     onDetachNode(c.childId);
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (onOpenPathMenu) {
+                    onOpenPathMenu(c.parentId, c.childId, e.clientX, e.clientY, c.lineType);
                   }
                 }}
               >
@@ -293,7 +367,7 @@ export const SVGConnectors: React.FC<SVGConnectorsProps> = ({
                   strokeLinecap="round"
                   className="transition-all duration-150 group-hover/sever:stroke-rose-400 group-hover/sever:stroke-[2]"
                 />
-                <title>Sever this connection</title>
+                <title>Sever connection (Click) • Path options (Right-click)</title>
               </g>
             )}
           </g>

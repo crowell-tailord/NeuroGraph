@@ -1,0 +1,11 @@
+- [x] allow for node path detaching (leaves node floating - ok)
+- [x] allow for node path drag and attach (drag from plus sign to a node you want to attach to)
+- [x] menu item 'text color' (top-level palette matching border color)
+- [x] allow for multiple connections per node (unlimited)
+- [x] line type (solid, double, dotted)
+- [x] vertically center text in square
+- [x] text size: normal, large, xlarge
+- [x] outline view - shows the nodes as a bullet list outline
+- [x] markdown bullet points are not rendering the bullet, only indenting
+- [x] project setting: line types (curved (current) or hard lines (90 degree turns and straight))
+- [x] when opening a note, auto expand to full height of that note and then some for new line editing

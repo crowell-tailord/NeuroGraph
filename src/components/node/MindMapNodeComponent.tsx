@@ -125,6 +125,25 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
   const textAlign = node.textAlign || (shape === 'circle' ? 'center' : 'left');
   const alignClass = textAlign === 'center' ? 'text-center' : textAlign === 'right' ? 'text-right' : 'text-left';
   const textColorHex = TEXT_COLOR_STYLE_MAP[node.textColor || 'default'] || '#f1f5f9';
+  const textSize = node.textSize || 'normal';
+  const textSizeClass =
+    textSize === 'xlarge'
+      ? 'text-[32px]'
+      : textSize === 'large'
+      ? 'text-xl'
+      : 'text-xs';
+  const lineHeightClass =
+    textSize === 'xlarge'
+      ? 'leading-tight'
+      : textSize === 'large'
+      ? 'leading-snug'
+      : 'leading-relaxed';
+  const headingSizeClass =
+    textSize === 'xlarge'
+      ? '[&_h1]:text-[38px] [&_h2]:text-[32px] [&_p]:leading-tight'
+      : textSize === 'large'
+      ? '[&_h1]:text-[26px] [&_h2]:text-[20px] [&_p]:leading-snug'
+      : '[&_h1]:text-sm [&_h2]:text-xs [&_p]:leading-relaxed';
 
   // Markdown rendering
   const renderedMarkdown = useMemo(() => {
@@ -144,15 +163,15 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
       textareaRef.current.focus();
       const len = textareaRef.current.value.length;
       textareaRef.current.setSelectionRange(len, len);
-      if (shape === 'circle' && textAlign === 'center') {
-        textareaRef.current.style.height = 'auto';
-        textareaRef.current.style.height = `${Math.min(
-          textareaRef.current.scrollHeight,
-          (node.height || 140) - 32
-        )}px`;
-      }
+      textareaRef.current.style.height = 'auto';
+      const pad = shape === 'circle' ? 32 : 24;
+      const maxH = Math.max((node.height || (shape === 'circle' ? 140 : 70)) - pad, 20);
+      textareaRef.current.style.height = `${Math.min(
+        textareaRef.current.scrollHeight,
+        maxH
+      )}px`;
     }
-  }, [isEditing, shape, textAlign, node.height]);
+  }, [isEditing, shape, textAlign, node.height, textSize]);
 
   // Cleanup active resize on unmount
   useEffect(() => {
@@ -354,8 +373,8 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
     measurer.style.margin = '0';
     measurer.style.border = 'none';
     measurer.style.boxSizing = 'border-box';
-    measurer.style.lineHeight = '1.625';
-    measurer.style.fontSize = '12px';
+    measurer.style.lineHeight = textSize === 'xlarge' ? '1.25' : textSize === 'large' ? '1.375' : '1.625';
+    measurer.style.fontSize = textSize === 'xlarge' ? '32px' : textSize === 'large' ? '20px' : '12px';
 
     if (containerRef.current) {
       const computed = window.getComputedStyle(containerRef.current);
@@ -364,9 +383,11 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
 
     const inner = document.createElement('div');
     inner.className = cn(
-      'font-mono text-xs leading-relaxed text-slate-100',
-      'prose-invert prose-xs',
-      '[&_p]:m-0 [&_ul]:pl-3.5 [&_ul]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h1]:font-bold [&_h1]:my-1 [&_h2]:text-xs [&_h2]:font-bold [&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded',
+      'font-mono text-slate-100',
+      textSizeClass,
+      lineHeightClass,
+      headingSizeClass,
+      '[&_p]:m-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:font-bold [&_h1]:my-1 [&_h2]:font-bold [&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded',
       alignClass
     );
     inner.innerHTML = htmlToMeasure;
@@ -568,14 +589,16 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
           } as React.CSSProperties
         }
         className={cn(
-          'w-full h-full font-mono text-xs leading-relaxed flex flex-col',
+          'w-full h-full font-mono flex flex-col justify-center',
+          textSizeClass,
+          lineHeightClass,
           shape === 'circle' ? 'p-4' : 'p-3',
           shape === 'circle' && textAlign === 'center'
             ? 'items-center justify-center text-center'
             : shape === 'circle' && textAlign === 'right'
-            ? 'items-end justify-start text-right'
+            ? 'items-end justify-center text-right'
             : shape === 'circle' && textAlign === 'left'
-            ? 'items-start justify-start text-left'
+            ? 'items-start justify-center text-left'
             : alignClass
         )}
       >
@@ -586,13 +609,13 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
             placeholder="Type thought (markdown supported)..."
             onChange={(e) => {
               onTextChange(node.id, e.target.value);
-              if (shape === 'circle' && textAlign === 'center') {
-                e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(
-                  e.target.scrollHeight,
-                  (node.height || 140) - 32
-                )}px`;
-              }
+              e.target.style.height = 'auto';
+              const pad = shape === 'circle' ? 32 : 24;
+              const maxH = Math.max((node.height || (shape === 'circle' ? 140 : 70)) - pad, 20);
+              e.target.style.height = `${Math.min(
+                e.target.scrollHeight,
+                maxH
+              )}px`;
             }}
             onBlur={() => setIsEditing(false)}
             onKeyDown={(e) => {
@@ -605,23 +628,22 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
               }
             }}
             className={cn(
-              'w-full bg-transparent resize-none border-none outline-none',
-              'font-mono text-xs leading-relaxed placeholder:text-slate-600',
-              'cursor-text focus:ring-0 p-0 block',
+              'w-full bg-transparent resize-none border-none outline-none my-auto',
+              'font-mono placeholder:text-slate-600',
+              textSizeClass,
+              lineHeightClass,
+              'cursor-text focus:ring-0 p-0 block h-auto',
               shape === 'circle' && textAlign === 'center'
-                ? 'h-auto text-center'
-                : cn('h-full', alignClass)
+                ? 'text-center'
+                : alignClass
             )}
             style={{
               color: textColorHex,
-              ...(shape === 'circle' && textAlign === 'center'
-                ? {
-                    maxHeight: `${Math.max((node.height || 140) - 32, 20)}px`,
-                    overflowY: 'auto',
-                  }
-                : {
-                    minHeight: `${Math.max((node.height || 70) - 26, 20)}px`,
-                  }),
+              maxHeight: `${Math.max(
+                (node.height || (shape === 'circle' ? 140 : 70)) - (shape === 'circle' ? 32 : 24),
+                20
+              )}px`,
+              overflowY: 'auto',
             }}
           />
         ) : (
@@ -632,10 +654,12 @@ export const MindMapNodeComponent: React.FC<MindMapNodeComponentProps> = ({
               setIsEditing(true);
             }}
             className={cn(
-              'w-full cursor-text overflow-visible prose-invert prose-xs break-words pb-0.5',
+              'w-full cursor-text overflow-visible prose-invert break-words pb-0.5 my-auto',
+              textSizeClass,
+              lineHeightClass,
+              headingSizeClass,
               '[&_p]:text-inherit [&_h1]:text-inherit [&_h2]:text-inherit [&_li]:text-inherit [&_strong]:text-inherit [&_em]:text-inherit',
-              shape === 'square' && 'min-h-full',
-              '[&_p]:m-0 [&_p]:leading-relaxed [&_ul]:pl-3.5 [&_ul]:my-1 [&_li]:my-0.5 [&_h1]:text-sm [&_h1]:font-bold [&_h1]:my-1 [&_h2]:text-xs [&_h2]:font-bold [&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded',
+              '[&_p]:m-0 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:font-bold [&_h1]:my-1 [&_h2]:font-bold [&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded',
               shape === 'circle' && textAlign === 'center' ? 'text-center' : alignClass
             )}
             dangerouslySetInnerHTML={{ __html: renderedMarkdown }}

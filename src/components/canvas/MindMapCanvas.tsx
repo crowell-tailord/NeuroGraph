@@ -7,6 +7,9 @@ import {
   NodeShape,
   NodeDirection,
   TextAlign,
+  LineType,
+  NodeTextSize,
+  LineRouting,
   ViewportState,
   getNodeTotalConnections,
   areNodesConnected,
@@ -16,11 +19,13 @@ import { GridBackground } from './GridBackground';
 import { SVGConnectors } from './SVGConnectors';
 import { MindMapNodeComponent } from '../node/MindMapNodeComponent';
 import { TacticalContextMenu } from './TacticalContextMenu';
+import { PathContextMenu } from './PathContextMenu';
 
 interface MindMapCanvasProps {
   nodes: MindMapNode[];
   viewport: ViewportState;
   selectedNodeId: string | null;
+  lineRouting?: LineRouting;
   onSelectNode: (id: string | null) => void;
   onMoveNode: (id: string, x: number, y: number) => void;
   onTextChange: (id: string, text: string) => void;
@@ -32,6 +37,9 @@ interface MindMapCanvasProps {
   onShapeChange: (id: string, shape: NodeShape) => void;
   onTextAlignChange: (id: string, align: TextAlign) => void;
   onTextColorChange: (id: string, textColor: NodeTextColor) => void;
+  onLineTypeChange?: (id: string, lineType: LineType) => void;
+  onUpdateConnectionLineType?: (parentId: string, childId: string, lineType: LineType) => void;
+  onTextSizeChange: (id: string, textSize: NodeTextSize) => void;
   onDetachNode: (id: string) => void;
   onDetachConnection?: (parentId: string, childId: string) => void;
   onAttachNodes: (sourceId: string, targetId: string) => void;
@@ -47,6 +55,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   nodes,
   viewport,
   selectedNodeId,
+  lineRouting = 'curved',
   onSelectNode,
   onMoveNode,
   onTextChange,
@@ -58,6 +67,9 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   onShapeChange,
   onTextAlignChange,
   onTextColorChange,
+  onLineTypeChange,
+  onUpdateConnectionLineType,
+  onTextSizeChange,
   onDetachNode,
   onDetachConnection,
   onAttachNodes,
@@ -78,6 +90,22 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     x: 0,
     y: 0,
     nodeId: null,
+  });
+
+  const [pathContextMenu, setPathContextMenu] = useState<{
+    isOpen: boolean;
+    x: number;
+    y: number;
+    parentId: string | null;
+    childId: string | null;
+    currentLineType: LineType;
+  }>({
+    isOpen: false,
+    x: 0,
+    y: 0,
+    parentId: null,
+    childId: null,
+    currentLineType: 'solid',
   });
 
   // Connecting drag state: dragging from a plus button to attach to another node
@@ -227,15 +255,27 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
 
     const dx = endX - startX;
     const dy = endY - startY;
-    const cpOffset = Math.max(Math.hypot(dx, dy) * 0.4, 30);
-    let cp1X = startX;
-    let cp1Y = startY;
-    if (dragConnect.dir === 'top') cp1Y -= cpOffset;
-    else if (dragConnect.dir === 'bottom') cp1Y += cpOffset;
-    else if (dragConnect.dir === 'left') cp1X -= cpOffset;
-    else cp1X += cpOffset;
 
-    const path = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${endX - dx * 0.2} ${endY - dy * 0.2}, ${endX} ${endY}`;
+    let path: string;
+    if (lineRouting === 'hard') {
+      if (dragConnect.dir === 'top' || dragConnect.dir === 'bottom') {
+        const midY = Math.round(startY + (endY - startY) / 2);
+        path = `M ${startX} ${startY} L ${startX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+      } else {
+        const midX = Math.round(startX + (endX - startX) / 2);
+        path = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+      }
+    } else {
+      const cpOffset = Math.max(Math.hypot(dx, dy) * 0.4, 30);
+      let cp1X = startX;
+      let cp1Y = startY;
+      if (dragConnect.dir === 'top') cp1Y -= cpOffset;
+      else if (dragConnect.dir === 'bottom') cp1Y += cpOffset;
+      else if (dragConnect.dir === 'left') cp1X -= cpOffset;
+      else cp1X += cpOffset;
+
+      path = `M ${startX} ${startY} C ${cp1X} ${cp1Y}, ${endX - dx * 0.2} ${endY - dy * 0.2}, ${endX} ${endY}`;
+    }
 
     return {
       path,
@@ -246,7 +286,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
       isTargetActive: Boolean(dragConnect.targetNodeId && !dragConnect.isTargetInvalid),
       isTargetInvalid: dragConnect.isTargetInvalid,
     };
-  }, [dragConnect, nodes, viewport.panX, viewport.panY, viewport.zoom]);
+  }, [dragConnect, lineRouting, nodes, viewport.panX, viewport.panY, viewport.zoom]);
 
   const handleStartConnect = (
     sourceNodeId: string,
@@ -271,6 +311,7 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
   }, [nodes, contextMenu.nodeId]);
 
   const handleOpenContextMenu = (nodeId: string, x: number, y: number) => {
+    setPathContextMenu((prev) => ({ ...prev, isOpen: false }));
     setContextMenu({
       isOpen: true,
       x,
@@ -283,18 +324,42 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
     setContextMenu((prev) => ({ ...prev, isOpen: false }));
   };
 
+  const handleOpenPathMenu = (
+    parentId: string,
+    childId: string,
+    x: number,
+    y: number,
+    currentLineType: LineType
+  ) => {
+    setContextMenu((prev) => ({ ...prev, isOpen: false }));
+    setPathContextMenu({
+      isOpen: true,
+      x,
+      y,
+      parentId,
+      childId,
+      currentLineType,
+    });
+  };
+
+  const handleClosePathMenu = () => {
+    setPathContextMenu((prev) => ({ ...prev, isOpen: false }));
+  };
+
   return (
     <div
       className="relative w-screen h-screen overflow-hidden bg-[#08090c] touch-none select-none cursor-grab active:cursor-grabbing"
       onWheel={onWheel}
       onPointerDown={(e) => {
         handleCloseContextMenu();
+        handleClosePathMenu();
         onPointerDown(e);
       }}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onClick={() => {
         handleCloseContextMenu();
+        handleClosePathMenu();
         onSelectNode(null);
       }}
     >
@@ -357,8 +422,11 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         <SVGConnectors
           nodes={nodes}
           selectedNodeId={selectedNodeId}
+          lineRouting={lineRouting}
           onDetachNode={onDetachNode}
           onDetachConnection={onDetachConnection}
+          onOpenContextMenu={handleOpenContextMenu}
+          onOpenPathMenu={handleOpenPathMenu}
           dragConnection={dragConnectionData}
         />
 
@@ -400,7 +468,27 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
         onShapeChange={onShapeChange}
         onTextAlignChange={onTextAlignChange}
         onTextColorChange={onTextColorChange}
+        onTextSizeChange={onTextSizeChange}
         onDetachNode={onDetachNode}
+      />
+
+      {/* Individual Path Context Menu (Right-click connection / sever icon) */}
+      <PathContextMenu
+        isOpen={pathContextMenu.isOpen}
+        x={pathContextMenu.x}
+        y={pathContextMenu.y}
+        parentId={pathContextMenu.parentId}
+        childId={pathContextMenu.childId}
+        currentLineType={pathContextMenu.currentLineType}
+        onClose={handleClosePathMenu}
+        onSelectLineType={(parentId, childId, lineType) => {
+          if (onUpdateConnectionLineType) {
+            onUpdateConnectionLineType(parentId, childId, lineType);
+          } else if (onLineTypeChange) {
+            onLineTypeChange(childId, lineType);
+          }
+        }}
+        onSeverConnection={onDetachConnection}
       />
     </div>
   );

@@ -3,6 +3,9 @@ export type NodeTextColor = 'default' | 'red' | 'amber' | 'cyan' | 'emerald' | '
 export type NodeShape = 'square' | 'circle';
 export type NodeDirection = 'top' | 'bottom' | 'left' | 'right';
 export type TextAlign = 'left' | 'center' | 'right';
+export type LineType = 'solid' | 'double' | 'dotted';
+export type NodeTextSize = 'normal' | 'large' | 'xlarge';
+export type LineRouting = 'curved' | 'hard';
 
 export interface MindMapNode {
   id: string;
@@ -15,9 +18,12 @@ export interface MindMapNode {
   height?: number;
   color: NodeColor;
   textColor?: NodeTextColor;
+  textSize?: NodeTextSize;
   tag?: string;
   shape?: NodeShape;
   textAlign?: TextAlign;
+  lineType?: LineType;
+  connectionLineTypes?: Record<string, LineType>;
   createdAt: number;
 }
 
@@ -72,6 +78,9 @@ export interface AdHocNote {
 export interface ProjectSettings {
   defaultColor: NodeColor;
   defaultShape: NodeShape;
+  defaultLineType?: LineType;
+  defaultTextSize?: NodeTextSize;
+  lineRouting?: LineRouting;
 }
 
 export interface MindMapDocument {

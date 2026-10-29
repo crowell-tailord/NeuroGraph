@@ -7,6 +7,8 @@ import {
   NodeShape,
   NodeDirection,
   TextAlign,
+  LineType,
+  NodeTextSize,
   AdHocNote,
   ProjectSettings,
   getNodeParentIds,
@@ -22,6 +24,9 @@ const STORAGE_KEY_PREFIX = 'neurograph_doc_';
 const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   defaultColor: 'red',
   defaultShape: 'square',
+  defaultLineType: 'solid',
+  defaultTextSize: 'normal',
+  lineRouting: 'curved',
 };
 
 export function useMindMap() {
@@ -59,6 +64,9 @@ export function useMindMap() {
               settings: {
                 defaultColor: first.settings?.defaultColor || DEFAULT_PROJECT_SETTINGS.defaultColor,
                 defaultShape: first.settings?.defaultShape || DEFAULT_PROJECT_SETTINGS.defaultShape,
+                defaultLineType: first.settings?.defaultLineType || DEFAULT_PROJECT_SETTINGS.defaultLineType,
+                defaultTextSize: first.settings?.defaultTextSize || DEFAULT_PROJECT_SETTINGS.defaultTextSize,
+                lineRouting: first.settings?.lineRouting || DEFAULT_PROJECT_SETTINGS.lineRouting,
               },
             });
             return;
@@ -78,6 +86,9 @@ export function useMindMap() {
             settings: {
               defaultColor: parsed.settings?.defaultColor || DEFAULT_PROJECT_SETTINGS.defaultColor,
               defaultShape: parsed.settings?.defaultShape || DEFAULT_PROJECT_SETTINGS.defaultShape,
+              defaultLineType: parsed.settings?.defaultLineType || DEFAULT_PROJECT_SETTINGS.defaultLineType,
+              defaultTextSize: parsed.settings?.defaultTextSize || DEFAULT_PROJECT_SETTINGS.defaultTextSize,
+              lineRouting: parsed.settings?.lineRouting || DEFAULT_PROJECT_SETTINGS.lineRouting,
             },
           });
         } catch {
@@ -147,6 +158,8 @@ export function useMindMap() {
     setDoc((prev) => {
       const defaultColor = prev.settings?.defaultColor || 'red';
       const defaultShape = prev.settings?.defaultShape || 'square';
+      const defaultLineType = prev.settings?.defaultLineType || 'solid';
+      const defaultTextSize = prev.settings?.defaultTextSize || 'normal';
       const width = defaultShape === 'circle' ? 140 : 220;
       const height = defaultShape === 'circle' ? 140 : 70;
 
@@ -160,6 +173,8 @@ export function useMindMap() {
         height,
         color: defaultColor,
         shape: defaultShape,
+        lineType: defaultLineType,
+        textSize: defaultTextSize,
         createdAt: Date.now(),
       };
       createdNode = newNode;
@@ -180,6 +195,8 @@ export function useMindMap() {
     const currentSettings = docRef.current.settings;
     const defaultColor = currentSettings?.defaultColor || 'red';
     const defaultShape = currentSettings?.defaultShape || 'square';
+    const defaultLineType = currentSettings?.defaultLineType || 'solid';
+    const defaultTextSize = currentSettings?.defaultTextSize || 'normal';
     const fallbackNode: MindMapNode = {
       id: generateId('root'),
       parentId: null,
@@ -190,6 +207,8 @@ export function useMindMap() {
       height: defaultShape === 'circle' ? 140 : 70,
       color: defaultColor,
       shape: defaultShape,
+      lineType: defaultLineType,
+      textSize: defaultTextSize,
       createdAt: Date.now(),
     };
     setSelectedNodeId(fallbackNode.id);
@@ -207,6 +226,8 @@ export function useMindMap() {
 
         const defaultColor = prev.settings?.defaultColor || 'red';
         const defaultShape = prev.settings?.defaultShape || 'square';
+        const defaultLineType = prev.settings?.defaultLineType || 'solid';
+        const defaultTextSize = prev.settings?.defaultTextSize || 'normal';
 
         const pW = parent.width || (parent.shape === 'circle' ? 140 : 200);
         const pH = parent.height || (parent.shape === 'circle' ? 140 : 70);
@@ -247,6 +268,9 @@ export function useMindMap() {
           height: childH,
           color: defaultColor,
           shape: defaultShape,
+          lineType: parent.lineType || defaultLineType,
+          connectionLineTypes: { [parent.id]: parent.lineType || defaultLineType },
+          textSize: parent.textSize || defaultTextSize,
           createdAt: Date.now(),
         };
 
@@ -279,6 +303,8 @@ export function useMindMap() {
 
       const defaultColor = prev.settings?.defaultColor || 'red';
       const defaultShape = prev.settings?.defaultShape || 'square';
+      const defaultLineType = prev.settings?.defaultLineType || 'solid';
+      const defaultTextSize = prev.settings?.defaultTextSize || 'normal';
       const sibW = defaultShape === 'circle' ? 140 : 200;
       const sibH = defaultShape === 'circle' ? 140 : 70;
 
@@ -286,9 +312,15 @@ export function useMindMap() {
       const newY = node.y;
 
       const nodeParents = getNodeParentIds(node);
+      const primaryParentId = nodeParents[0] || null;
+      const initialConnectionTypes: Record<string, LineType> = {};
+      if (primaryParentId) {
+        initialConnectionTypes[primaryParentId] = node.lineType || defaultLineType;
+      }
+
       const newNode: MindMapNode = {
         id: generateId('sibling'),
-        parentId: nodeParents[0] || null,
+        parentId: primaryParentId,
         parentIds: nodeParents.length > 0 ? [...nodeParents] : [],
         text: '',
         x: newX,
@@ -297,6 +329,9 @@ export function useMindMap() {
         height: sibH,
         color: defaultColor,
         shape: defaultShape,
+        lineType: node.lineType || defaultLineType,
+        connectionLineTypes: initialConnectionTypes,
+        textSize: node.textSize || defaultTextSize,
         createdAt: Date.now(),
       };
 
@@ -407,6 +442,56 @@ export function useMindMap() {
     }));
   }, []);
 
+  // Update node line type (solid, double, dotted)
+  const updateNodeLineType = useCallback((id: string, lineType: LineType) => {
+    setHasUnsavedChanges(true);
+    setDoc((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      nodes: prev.nodes.map((n) => (n.id === id ? { ...n, lineType } : n)),
+    }));
+  }, []);
+
+  // Update specific connection line type between parentId and childId
+  const updateConnectionLineType = useCallback((parentId: string, childId: string, lineType: LineType) => {
+    setHasUnsavedChanges(true);
+    setDoc((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      nodes: prev.nodes.map((n) => {
+        if (n.id === childId) {
+          return {
+            ...n,
+            connectionLineTypes: {
+              ...(n.connectionLineTypes || {}),
+              [parentId]: lineType,
+            },
+          };
+        }
+        if (n.id === parentId) {
+          return {
+            ...n,
+            connectionLineTypes: {
+              ...(n.connectionLineTypes || {}),
+              [childId]: lineType,
+            },
+          };
+        }
+        return n;
+      }),
+    }));
+  }, []);
+
+  // Update node text size (normal, large, xlarge)
+  const updateNodeTextSize = useCallback((id: string, textSize: NodeTextSize) => {
+    setHasUnsavedChanges(true);
+    setDoc((prev) => ({
+      ...prev,
+      updatedAt: Date.now(),
+      nodes: prev.nodes.map((n) => (n.id === id ? { ...n, textSize } : n)),
+    }));
+  }, []);
+
   // Detach all connections to/from a node (leaves the node floating)
   const detachNode = useCallback((id: string) => {
     setHasUnsavedChanges(true);
@@ -415,18 +500,25 @@ export function useMindMap() {
       updatedAt: Date.now(),
       nodes: prev.nodes.map((n) => {
         if (n.id === id) {
-          return { ...n, parentId: null, parentIds: [] };
+          return { ...n, parentId: null, parentIds: [], connectionLineTypes: {} };
         }
         const parents = getNodeParentIds(n);
+        const newConnectionLineTypes = { ...(n.connectionLineTypes || {}) };
+        delete newConnectionLineTypes[id];
+
         if (parents.includes(id)) {
           const updated = parents.filter((p) => p !== id);
           return {
             ...n,
             parentId: updated[0] || null,
             parentIds: updated,
+            connectionLineTypes: newConnectionLineTypes,
           };
         }
-        return n;
+        return {
+          ...n,
+          connectionLineTypes: newConnectionLineTypes,
+        };
       }),
     }));
   }, []);
@@ -441,22 +533,32 @@ export function useMindMap() {
         if (n.id === childId) {
           const currentParents = getNodeParentIds(n);
           const updated = currentParents.filter((p) => p !== parentId);
+          const newConnectionLineTypes = { ...(n.connectionLineTypes || {}) };
+          delete newConnectionLineTypes[parentId];
           return {
             ...n,
             parentId: updated[0] || null,
             parentIds: updated,
+            connectionLineTypes: newConnectionLineTypes,
           };
         }
         if (n.id === parentId) {
           const currentParents = getNodeParentIds(n);
+          const newConnectionLineTypes = { ...(n.connectionLineTypes || {}) };
+          delete newConnectionLineTypes[childId];
           if (currentParents.includes(childId)) {
             const updated = currentParents.filter((p) => p !== childId);
             return {
               ...n,
               parentId: updated[0] || null,
               parentIds: updated,
+              connectionLineTypes: newConnectionLineTypes,
             };
           }
+          return {
+            ...n,
+            connectionLineTypes: newConnectionLineTypes,
+          };
         }
         return n;
       }),
@@ -605,6 +707,9 @@ export function useMindMap() {
       settings: {
         defaultColor: newDoc.settings?.defaultColor || DEFAULT_PROJECT_SETTINGS.defaultColor,
         defaultShape: newDoc.settings?.defaultShape || DEFAULT_PROJECT_SETTINGS.defaultShape,
+        defaultLineType: newDoc.settings?.defaultLineType || DEFAULT_PROJECT_SETTINGS.defaultLineType,
+        defaultTextSize: newDoc.settings?.defaultTextSize || DEFAULT_PROJECT_SETTINGS.defaultTextSize,
+        lineRouting: newDoc.settings?.lineRouting || DEFAULT_PROJECT_SETTINGS.lineRouting,
       },
     };
     setDoc(populatedDoc);
@@ -621,6 +726,9 @@ export function useMindMap() {
         const updated: ProjectSettings = {
           defaultColor: newSettings.defaultColor ?? current.defaultColor ?? 'red',
           defaultShape: newSettings.defaultShape ?? current.defaultShape ?? 'square',
+          defaultLineType: newSettings.defaultLineType ?? current.defaultLineType ?? 'solid',
+          defaultTextSize: newSettings.defaultTextSize ?? current.defaultTextSize ?? 'normal',
+          lineRouting: newSettings.lineRouting ?? current.lineRouting ?? 'curved',
         };
         const updatedDoc: MindMapDocument = {
           ...prev,
@@ -708,6 +816,9 @@ export function useMindMap() {
     updateNodeShape,
     updateNodeTextAlign,
     updateNodeTextColor,
+    updateNodeLineType,
+    updateConnectionLineType,
+    updateNodeTextSize,
     detachNode,
     detachConnection,
     attachNodes,
